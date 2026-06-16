@@ -42,6 +42,7 @@ export default function ApprovalDetail() {
   const {
     loading,
     selectedApproval,
+    initApprovals,
     fetchApprovalById,
     approveApproval,
     rejectApproval,
@@ -52,6 +53,10 @@ export default function ApprovalDetail() {
   const [approveComment, setApproveComment] = useState('');
   const [rejectComment, setRejectComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    initApprovals();
+  }, [initApprovals]);
 
   useEffect(() => {
     if (id) {
@@ -84,7 +89,6 @@ export default function ApprovalDetail() {
         message.success('审批通过成功');
         setApproveModalVisible(false);
         setApproveComment('');
-        fetchApprovalById(id);
       }
     } catch (error) {
       message.error('审批失败，请重试');
@@ -106,7 +110,6 @@ export default function ApprovalDetail() {
         message.success('审批已驳回');
         setRejectModalVisible(false);
         setRejectComment('');
-        fetchApprovalById(id);
       }
     } catch (error) {
       message.error('操作失败，请重试');
@@ -516,7 +519,7 @@ export default function ApprovalDetail() {
                 </div>
 
                 <button
-                  onClick={() => navigate(`/institutions/${relatedInstitution.id}`)}
+                  onClick={() => navigate(`/institution/${relatedInstitution.id}`)}
                   className="w-full mt-2 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
                 >
                   查看机构详情

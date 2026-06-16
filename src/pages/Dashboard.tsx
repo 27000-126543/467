@@ -51,10 +51,16 @@ const institutionLevels = [
 
 export default function Dashboard() {
   const {
-    nationalMetrics,
-    provinceMetrics,
-    recentAlerts,
-    recentReports,
+    selectedProvince,
+    selectedLevel,
+    selectedAgeGroup,
+    setSelectedProvince,
+    setSelectedLevel,
+    setSelectedAgeGroup,
+    getFilteredNationalMetrics,
+    getFilteredProvinceMetrics,
+    getFilteredAlerts,
+    getFilteredReports,
     fetchNationalMetrics,
     fetchProvinceMetrics,
     fetchHeatmapData,
@@ -62,10 +68,27 @@ export default function Dashboard() {
     fetchRecentReports,
   } = useDashboardStore();
 
-  const [selectedProvince, setSelectedProvince] = useState<string>('all');
-  const [selectedLevel, setSelectedLevel] = useState<string>('all');
-  const [selectedAgeGroup, setSelectedAgeGroup] = useState<string>('all');
   const [activeIndicator, setActiveIndicator] = useState<'attendance' | 'health'>('attendance');
+
+  const filteredNationalMetrics = useMemo(
+    () => getFilteredNationalMetrics(),
+    [selectedProvince, selectedLevel, selectedAgeGroup, getFilteredNationalMetrics]
+  );
+
+  const filteredProvinceMetrics = useMemo(
+    () => getFilteredProvinceMetrics(),
+    [selectedProvince, selectedLevel, selectedAgeGroup, getFilteredProvinceMetrics]
+  );
+
+  const filteredAlerts = useMemo(
+    () => getFilteredAlerts(),
+    [selectedProvince, selectedLevel, selectedAgeGroup, getFilteredAlerts]
+  );
+
+  const filteredReports = useMemo(
+    () => getFilteredReports(),
+    [selectedProvince, selectedLevel, selectedAgeGroup, getFilteredReports]
+  );
 
   useEffect(() => {
     fetchNationalMetrics();
@@ -76,25 +99,25 @@ export default function Dashboard() {
   }, [fetchNationalMetrics, fetchProvinceMetrics, fetchHeatmapData, fetchRecentAlerts, fetchRecentReports]);
 
   const sortedProvinceMetrics = useMemo(() => {
-    return [...provinceMetrics].sort((a, b) => {
+    return [...filteredProvinceMetrics].sort((a, b) => {
       if (activeIndicator === 'attendance') {
         return b.attendanceRate - a.attendanceRate;
       }
       return b.healthAbnormalRate - a.healthAbnormalRate;
     });
-  }, [provinceMetrics, activeIndicator]);
+  }, [filteredProvinceMetrics, activeIndicator]);
 
   const healthRanking = useMemo(() => {
-    return [...provinceMetrics]
+    return [...filteredProvinceMetrics]
       .sort((a, b) => a.healthAbnormalRate - b.healthAbnormalRate)
       .slice(0, 10);
-  }, [provinceMetrics]);
+  }, [filteredProvinceMetrics]);
 
   const teacherRatioRanking = useMemo(() => {
-    return [...provinceMetrics]
+    return [...filteredProvinceMetrics]
       .sort((a, b) => b.teacherStudentRatio - a.teacherStudentRatio)
       .slice(0, 10);
-  }, [provinceMetrics]);
+  }, [filteredProvinceMetrics]);
 
   const heatmapOption = useMemo(() => {
     const data = sortedProvinceMetrics.map((item) => ({
@@ -451,7 +474,7 @@ export default function Dashboard() {
       <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard
           title="全国入托率"
-          value={nationalMetrics ? formatPercent(nationalMetrics.attendanceRate) : '--'}
+          value={filteredNationalMetrics ? formatPercent(filteredNationalMetrics.attendanceRate) : '--'}
           icon={<Users className="w-6 h-6" />}
           variant="primary"
           change={2.3}
@@ -460,7 +483,7 @@ export default function Dashboard() {
         />
         <StatCard
           title="健康异常率"
-          value={nationalMetrics ? formatPercent(nationalMetrics.healthAbnormalRate) : '--'}
+          value={filteredNationalMetrics ? formatPercent(filteredNationalMetrics.healthAbnormalRate) : '--'}
           icon={<HeartPulse className="w-6 h-6" />}
           variant="danger"
           change={-0.8}
@@ -469,7 +492,7 @@ export default function Dashboard() {
         />
         <StatCard
           title="营养达标率"
-          value={nationalMetrics ? formatPercent(nationalMetrics.nutritionComplianceRate) : '--'}
+          value={filteredNationalMetrics ? formatPercent(filteredNationalMetrics.nutritionComplianceRate) : '--'}
           icon={<UtensilsCrossed className="w-6 h-6" />}
           variant="health"
           change={1.5}
@@ -478,7 +501,7 @@ export default function Dashboard() {
         />
         <StatCard
           title="师生比"
-          value={nationalMetrics ? formatRatio(nationalMetrics.teacherStudentRatio) : '--'}
+          value={filteredNationalMetrics ? formatRatio(filteredNationalMetrics.teacherStudentRatio) : '--'}
           icon={<UserCheck className="w-6 h-6" />}
           variant="warning"
           change={0.5}
@@ -619,7 +642,7 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-1 bg-danger-50 text-danger-600 text-xs font-medium rounded-full">
-                {recentAlerts.filter((a) => a.status === 'pending' || a.status === 'processing').length} 条待处理
+                {filteredAlerts.filter((a) => a.status === 'pending' || a.status === 'processing').length} 条待处理
               </span>
               <button className="text-primary-600 text-sm font-medium hover:text-primary-700 transition-colors">
                 更多
@@ -628,7 +651,7 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-3">
-            {recentAlerts.slice(0, 4).map((alert, index) => (
+            {filteredAlerts.slice(0, 4).map((alert, index) => (
               <motion.div
                 key={alert.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -714,7 +737,7 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-3">
-            {recentReports.map((report, index) => (
+            {filteredReports.map((report, index) => (
               <motion.div
                 key={report.id}
                 initial={{ opacity: 0, y: 10 }}

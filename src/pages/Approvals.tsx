@@ -46,64 +46,64 @@ export default function Approvals() {
   const navigate = useNavigate();
   const {
     loading,
-    approvals,
-    total,
     page,
     pageSize,
     activeTab,
     typeFilter,
     statusFilter,
     searchKeyword,
-    fetchApprovals,
+    initApprovals,
     setActiveTab,
     setFilters,
     setPagination,
+    getFilteredApprovals,
     getStats,
   } = useApprovalsStore();
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  const filteredApprovals = useMemo(() => getFilteredApprovals(), [getFilteredApprovals]);
   const stats = useMemo(() => getStats(), [getStats]);
 
+  const pagedApprovals = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredApprovals.slice(start, start + pageSize);
+  }, [filteredApprovals, page, pageSize]);
+
+  const total = filteredApprovals.length;
+
   useEffect(() => {
-    fetchApprovals();
-  }, [fetchApprovals]);
+    initApprovals();
+  }, [initApprovals]);
 
   const handleTabChange = (tab: 'pending' | 'approved' | 'all') => {
     setActiveTab(tab);
-    fetchApprovals({ tab });
   };
 
   const handleTypeChange = (value: ApprovalType | 'all') => {
     setFilters({ type: value });
-    fetchApprovals({ type: value });
   };
 
   const handleStatusChange = (value: ApprovalStatus | 'all') => {
     setFilters({ status: value });
-    fetchApprovals({ status: value });
   };
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const keyword = e.target.value;
     setFilters({ keyword });
-    fetchApprovals({ keyword });
   };
 
   const handleDateChange = () => {
     if (startDate && endDate) {
       setFilters({ dateRange: [startDate, endDate] });
-      fetchApprovals({ dateRange: [startDate, endDate] });
     } else if (!startDate && !endDate) {
       setFilters({ dateRange: null });
-      fetchApprovals({ dateRange: null });
     }
   };
 
   const handlePageChange = (page: number, pageSize: number) => {
     setPagination(page, pageSize);
-    fetchApprovals({ page, pageSize });
   };
 
   const handleViewDetail = (id: string) => {
@@ -336,13 +336,13 @@ export default function Approvals() {
             <div className="flex justify-center items-center py-20">
               <Spin size="large" />
             </div>
-          ) : approvals.length === 0 ? (
+          ) : pagedApprovals.length === 0 ? (
             <div className="py-20">
               <Empty description="暂无审批数据" />
             </div>
           ) : (
             <div className="space-y-4">
-              {approvals.map((approval, index) => (
+              {pagedApprovals.map((approval, index) => (
                 <motion.div
                   key={approval.id}
                   initial={{ opacity: 0, y: 10 }}

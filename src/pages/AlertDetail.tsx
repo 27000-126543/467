@@ -273,7 +273,6 @@ export default function AlertDetail() {
     const success = await processAlert(selectedAlert.id, processStatus, processNote);
     setProcessing(false);
     if (success) {
-      fetchAlertById(selectedAlert.id);
       setProcessNote('');
     }
   };
@@ -286,7 +285,6 @@ export default function AlertDetail() {
     if (success) {
       setShowEscalateModal(false);
       setEscalateReason('');
-      fetchAlertById(selectedAlert.id);
     }
   };
 

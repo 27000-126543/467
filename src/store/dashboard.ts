@@ -13,9 +13,21 @@ import {
   generateNationalMetrics,
   generateProvinceMetrics,
   mockHeatmapData,
-  mockAlerts,
   mockReports,
+  regionOptions,
 } from '@/mock/data';
+import { useAuthStore } from '@/store/auth';
+import { useAlertsStore } from '@/store/alerts';
+
+const ageGroupRatios: Record<string, number> = {
+  'all': 1,
+  '0-1': 0.1,
+  '1-2': 0.15,
+  '2-3': 0.2,
+  '3-4': 0.2,
+  '4-5': 0.2,
+  '5-6': 0.15,
+};
 
 interface DashboardState {
   loading: boolean;
@@ -26,7 +38,9 @@ interface DashboardState {
   realtimeData: RealtimeData[];
   recentAlerts: Alert[];
   recentReports: OperationReport[];
-  selectedProvince: string | null;
+  selectedProvince: string;
+  selectedLevel: string;
+  selectedAgeGroup: string;
   selectedIndicator: 'attendance' | 'health';
   
   fetchNationalMetrics: () => Promise<void>;
@@ -36,8 +50,16 @@ interface DashboardState {
   fetchRealtimeData: (region?: string) => Promise<void>;
   fetchRecentAlerts: () => Promise<void>;
   fetchRecentReports: () => Promise<void>;
-  setSelectedProvince: (province: string | null) => void;
+  setSelectedProvince: (province: string) => void;
+  setSelectedLevel: (level: string) => void;
+  setSelectedAgeGroup: (ageGroup: string) => void;
   setSelectedIndicator: (indicator: 'attendance' | 'health') => void;
+  getFilteredInstitutions: () => Institution[];
+  getFilteredRealtimeData: () => RealtimeData[];
+  getFilteredNationalMetrics: () => AggregatedMetrics | null;
+  getFilteredProvinceMetrics: () => AggregatedMetrics[];
+  getFilteredAlerts: () => Alert[];
+  getFilteredReports: () => OperationReport[];
   refreshAll: () => Promise<void>;
 }
 
@@ -48,9 +70,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   heatmapData: [],
   institutions: mockInstitutions,
   realtimeData: mockRealtimeData,
-  recentAlerts: mockAlerts.slice(0, 5),
-  recentReports: mockReports.slice(0, 3),
-  selectedProvince: null,
+  recentAlerts: [],
+  recentReports: [],
+  selectedProvince: 'all',
+  selectedLevel: 'all',
+  selectedAgeGroup: 'all',
   selectedIndicator: 'attendance',
 
   fetchNationalMetrics: async () => {
@@ -110,21 +134,176 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   fetchRecentAlerts: async () => {
     set({ loading: true });
     await new Promise((resolve) => setTimeout(resolve, 300));
-    set({ recentAlerts: mockAlerts.slice(0, 5), loading: false });
+    const alertsStore = useAlertsStore.getState();
+    alertsStore.initAlerts();
+    const filteredAlerts = get().getFilteredAlerts();
+    set({ recentAlerts: filteredAlerts, loading: false });
   },
 
   fetchRecentReports: async () => {
     set({ loading: true });
     await new Promise((resolve) => setTimeout(resolve, 300));
-    set({ recentReports: mockReports.slice(0, 3), loading: false });
+    const filteredReports = get().getFilteredReports();
+    set({ recentReports: filteredReports, loading: false });
   },
 
   setSelectedProvince: (province) => {
     set({ selectedProvince: province });
   },
 
+  setSelectedLevel: (level) => {
+    set({ selectedLevel: level });
+  },
+
+  setSelectedAgeGroup: (ageGroup) => {
+    set({ selectedAgeGroup: ageGroup });
+  },
+
   setSelectedIndicator: (indicator) => {
     set({ selectedIndicator: indicator });
+  },
+
+  getFilteredInstitutions: () => {
+    const { selectedProvince, selectedLevel } = get();
+    const user = useAuthStore.getState().user;
+    
+    let result = [...mockInstitutions];
+    
+    if (user?.role === 'provincial' && user.region.province) {
+      result = result.filter((i) => i.address.province === user.region.province);
+    } else if (user?.role === 'municipal' && user.region.city) {
+      result = result.filter((i) => i.address.city === user.region.city);
+    }
+    
+    if (selectedProvince !== 'all') {
+      result = result.filter((i) => i.address.province === selectedProvince);
+    }
+    
+    if (selectedLevel !== 'all') {
+      result = result.filter((i) => i.level === selectedLevel);
+    }
+    
+    return result;
+  },
+
+  getFilteredRealtimeData: () => {
+    const filteredInstitutions = get().getFilteredInstitutions();
+    const instIds = filteredInstitutions.map((i) => i.id);
+    return mockRealtimeData.filter((d) => instIds.includes(d.institutionId));
+  },
+
+  getFilteredNationalMetrics: () => {
+    const { selectedAgeGroup } = get();
+    const filteredInstitutions = get().getFilteredInstitutions();
+    const filteredRealtime = get().getFilteredRealtimeData();
+    
+    if (filteredInstitutions.length === 0) {
+      return null;
+    }
+    
+    const ageRatio = ageGroupRatios[selectedAgeGroup] || 1;
+    const totalStudents = Math.floor(filteredInstitutions.reduce((sum, inst) => sum + inst.studentCount, 0) * ageRatio);
+    const totalTeachers = filteredInstitutions.reduce((sum, inst) => sum + inst.teacherCount, 0);
+    
+    const avgAttendanceRate = filteredRealtime.length > 0
+      ? filteredRealtime.reduce((sum, d) => sum + d.attendance.rate, 0) / filteredRealtime.length
+      : 0;
+    const avgHealthAbnormalRate = filteredRealtime.length > 0
+      ? filteredRealtime.reduce((sum, d) => sum + d.health.abnormalRate, 0) / filteredRealtime.length
+      : 0;
+    const avgNutritionComplianceRate = filteredRealtime.length > 0
+      ? filteredRealtime.reduce((sum, d) => sum + d.diet.nutritionComplianceRate, 0) / filteredRealtime.length
+      : 0;
+    
+    return {
+      regionCode: 'national',
+      regionName: '全国',
+      period: 'day',
+      periodStart: new Date().toISOString().split('T')[0],
+      periodEnd: new Date().toISOString().split('T')[0],
+      attendanceRate: parseFloat(avgAttendanceRate.toFixed(2)),
+      healthAbnormalRate: parseFloat(avgHealthAbnormalRate.toFixed(2)),
+      nutritionComplianceRate: parseFloat(avgNutritionComplianceRate.toFixed(2)),
+      teacherStudentRatio: totalStudents > 0 ? parseFloat((totalTeachers / totalStudents).toFixed(3)) : 0,
+      attendanceStabilityIndex: 95.5,
+      institutionCount: filteredInstitutions.length,
+      totalStudents,
+      totalTeachers,
+    };
+  },
+
+  getFilteredProvinceMetrics: () => {
+    const { selectedAgeGroup } = get();
+    const filteredInstitutions = get().getFilteredInstitutions();
+    const filteredRealtime = get().getFilteredRealtimeData();
+    
+    const provinces = [...new Set(filteredInstitutions.map((i) => i.address.province))];
+    const ageRatio = ageGroupRatios[selectedAgeGroup] || 1;
+    
+    return provinces.map((province) => {
+      const provInstitutions = filteredInstitutions.filter((i) => i.address.province === province);
+      const provInstIds = provInstitutions.map((i) => i.id);
+      const provRealtime = filteredRealtime.filter((d) => provInstIds.includes(d.institutionId));
+      
+      const totalStudents = Math.floor(provInstitutions.reduce((sum, inst) => sum + inst.studentCount, 0) * ageRatio);
+      const totalTeachers = provInstitutions.reduce((sum, inst) => sum + inst.teacherCount, 0);
+      
+      const avgAttendanceRate = provRealtime.length > 0
+        ? provRealtime.reduce((sum, d) => sum + d.attendance.rate, 0) / provRealtime.length
+        : 0;
+      const avgHealthAbnormalRate = provRealtime.length > 0
+        ? provRealtime.reduce((sum, d) => sum + d.health.abnormalRate, 0) / provRealtime.length
+        : 0;
+      const avgNutritionComplianceRate = provRealtime.length > 0
+        ? provRealtime.reduce((sum, d) => sum + d.diet.nutritionComplianceRate, 0) / provRealtime.length
+        : 0;
+      
+      return {
+        regionCode: province,
+        regionName: province,
+        period: 'day',
+        periodStart: new Date().toISOString().split('T')[0],
+        periodEnd: new Date().toISOString().split('T')[0],
+        attendanceRate: parseFloat(avgAttendanceRate.toFixed(2)),
+        healthAbnormalRate: parseFloat(avgHealthAbnormalRate.toFixed(2)),
+        nutritionComplianceRate: parseFloat(avgNutritionComplianceRate.toFixed(2)),
+        teacherStudentRatio: totalStudents > 0 ? parseFloat((totalTeachers / totalStudents).toFixed(3)) : 0,
+        attendanceStabilityIndex: 95.5,
+        institutionCount: provInstitutions.length,
+        totalStudents,
+        totalTeachers,
+      };
+    });
+  },
+
+  getFilteredAlerts: () => {
+    const alertsStore = useAlertsStore.getState();
+    alertsStore.initAlerts();
+    const filteredInstitutions = get().getFilteredInstitutions();
+    const instIds = filteredInstitutions.map((i) => i.id);
+    const allAlerts = alertsStore.allAlerts;
+    return allAlerts.filter((a) => instIds.includes(a.institutionId)).slice(0, 5);
+  },
+
+  getFilteredReports: () => {
+    const user = useAuthStore.getState().user;
+    const { selectedProvince } = get();
+
+    let result = [...mockReports];
+
+    if (user && user.role !== 'national') {
+      if (user.role === 'provincial' && user.region.province) {
+        result = result.filter((r) => r.regionName === user.region.province);
+      } else if (user.role === 'municipal' && user.region.city) {
+        result = result.filter((r) => r.regionName === user.region.city);
+      }
+    }
+
+    if (selectedProvince !== 'all') {
+      result = result.filter((r) => r.regionName === selectedProvince);
+    }
+
+    return result.slice(0, 3);
   },
 
   refreshAll: async () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -53,8 +53,7 @@ const typeOptions: { value: AlertType | 'all'; label: string }[] = [
 export default function Alerts() {
   const navigate = useNavigate();
   const {
-    alerts,
-    total,
+    allAlerts,
     page,
     pageSize,
     loading,
@@ -62,39 +61,46 @@ export default function Alerts() {
     levelFilter,
     typeFilter,
     searchKeyword,
-    fetchAlerts,
+    initAlerts,
     setFilters,
     setPagination,
+    getFilteredAlerts,
     getStats,
     processAlert,
   } = useAlertsStore();
 
-  const stats = getStats();
+  const stats = useMemo(() => getStats(), [allAlerts, statusFilter, levelFilter, typeFilter, searchKeyword]);
+  
+  const filteredAlerts = useMemo(() => getFilteredAlerts(), [allAlerts, statusFilter, levelFilter, typeFilter, searchKeyword]);
+  
+  const pagedAlerts = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredAlerts.slice(start, start + pageSize);
+  }, [filteredAlerts, page, pageSize]);
+  
+  const total = filteredAlerts.length;
   const [showProcessModal, setShowProcessModal] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
   const [processNote, setProcessNote] = useState('');
   const [processStatus, setProcessStatus] = useState<AlertStatus>('processing');
 
   useEffect(() => {
-    fetchAlerts();
-  }, [fetchAlerts]);
+    initAlerts();
+  }, [initAlerts]);
 
   const handleStatusChange = (status: AlertStatus | 'all') => {
     setFilters({ status });
     setPagination(1, pageSize);
-    fetchAlerts({ status, page: 1 });
   };
 
   const handleLevelChange = (level: AlertLevel | 'all') => {
     setFilters({ level });
     setPagination(1, pageSize);
-    fetchAlerts({ level, page: 1 });
   };
 
   const handleTypeChange = (type: AlertType | 'all') => {
     setFilters({ type });
     setPagination(1, pageSize);
-    fetchAlerts({ type, page: 1 });
   };
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,16 +110,14 @@ export default function Alerts() {
 
   const handleSearchSubmit = () => {
     setPagination(1, pageSize);
-    fetchAlerts({ keyword: searchKeyword, page: 1 });
   };
 
   const handlePageChange = (newPage: number) => {
     setPagination(newPage, pageSize);
-    fetchAlerts({ page: newPage });
   };
 
   const handleViewDetail = (id: string) => {
-    navigate(`/alerts/${id}`);
+    navigate(`/pagedAlerts/${id}`);
   };
 
   const handleProcessClick = (id: string) => {
@@ -129,7 +133,6 @@ export default function Alerts() {
     if (success) {
       setShowProcessModal(false);
       setSelectedAlert(null);
-      fetchAlerts();
     }
   };
 
@@ -337,7 +340,7 @@ export default function Alerts() {
                     <p className="text-sm text-neutral-500 mt-2">加载中...</p>
                   </td>
                 </tr>
-              ) : alerts.length === 0 ? (
+              ) : pagedAlerts.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-6 py-12 text-center">
                     <AlertCircle className="w-12 h-12 text-neutral-300 mx-auto" />
@@ -345,7 +348,7 @@ export default function Alerts() {
                   </td>
                 </tr>
               ) : (
-                alerts.map((alert, index) => (
+                pagedAlerts.map((alert, index) => (
                   <motion.tr
                     key={alert.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -433,7 +436,7 @@ export default function Alerts() {
           </table>
         </div>
 
-        {!loading && alerts.length > 0 && (
+        {!loading && pagedAlerts.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-neutral-100">
             <div className="text-sm text-neutral-500">
               共 <span className="font-semibold text-neutral-700">{total}</span> 条记录

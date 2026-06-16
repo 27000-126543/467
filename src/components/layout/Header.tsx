@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -17,10 +17,14 @@ export default function Header() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const { user, logout } = useAuthStore();
-  const { alerts } = useAlertsStore();
+  const { allAlerts, getFilteredAlerts, initAlerts } = useAlertsStore();
   const navigate = useNavigate();
 
-  const pendingAlerts = alerts.filter((a) => a.status === 'pending' || a.status === 'escalated');
+  const pendingAlerts = useMemo(() => {
+    initAlerts();
+    const filtered = getFilteredAlerts();
+    return filtered.filter((a) => a.status === 'pending' || a.status === 'escalated');
+  }, [allAlerts, getFilteredAlerts, initAlerts]);
 
   const handleLogout = () => {
     logout();

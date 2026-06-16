@@ -18,10 +18,11 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import StatCard from '@/components/common/StatCard';
-import { useEnrollmentStore } from '@/store/enrollment';
+import { useEnrollmentStore, generateForecast } from '@/store/enrollment';
 import { formatNumber, formatPercent, getSemesterText } from '@/utils/format';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+import type { EnrollmentPlan } from '@/types';
 
 const yearOptions = [2024, 2025, 2026];
 const semesterOptions = [
@@ -32,13 +33,14 @@ const semesterOptions = [
 
 export default function Enrollment() {
   const {
-    plans,
+    allPlans,
     loading,
     searchKeyword,
     yearFilter,
     semesterFilter,
     page,
     pageSize,
+    initPlans,
     fetchPlans,
     setSearchKeyword,
     setYearFilter,
@@ -48,6 +50,9 @@ export default function Enrollment() {
     getFilteredPlans,
     getTotalDegreeGap,
     getAvgEnrollmentRate,
+    getTotalPlannedCapacity,
+    getTotalActualEnrollment,
+    getAggregatedForecast,
   } = useEnrollmentStore();
 
   const [isDragging, setIsDragging] = useState(false);
@@ -56,48 +61,44 @@ export default function Enrollment() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchPlans();
-  }, [fetchPlans]);
+    initPlans();
+  }, [initPlans]);
 
   const totalPlannedCapacity = useMemo(() => {
-    return plans.reduce((sum, plan) => sum + plan.plannedCapacity, 0);
-  }, [plans]);
+    return getTotalPlannedCapacity();
+  }, [allPlans, searchKeyword, yearFilter, semesterFilter, getTotalPlannedCapacity]);
 
   const totalActualEnrollment = useMemo(() => {
-    return plans.reduce((sum, plan) => sum + plan.actualEnrollment, 0);
-  }, [plans]);
+    return getTotalActualEnrollment();
+  }, [allPlans, searchKeyword, yearFilter, semesterFilter, getTotalActualEnrollment]);
 
   const avgEnrollmentRate = useMemo(() => {
-    if (plans.length === 0) return 0;
-    const avg = plans.reduce((sum, plan) => sum + plan.enrollmentRate, 0) / plans.length;
-    return parseFloat(avg.toFixed(1));
-  }, [plans]);
+    return getAvgEnrollmentRate();
+  }, [allPlans, searchKeyword, yearFilter, semesterFilter, getAvgEnrollmentRate]);
 
   const totalDegreeGap = useMemo(() => {
-    if (plans.length === 0) return 0;
-    return plans.reduce((sum, plan) => {
-      const latestGap = plan.forecast[plan.forecast.length - 1]?.projectedGap || 0;
-      return sum + latestGap;
-    }, 0);
-  }, [plans]);
+    return getTotalDegreeGap();
+  }, [allPlans, searchKeyword, yearFilter, semesterFilter, getTotalDegreeGap]);
 
   const forecastData = useMemo(() => {
-    if (plans.length === 0) return [];
-    const days = 90;
-    const result = [];
-    for (let i = 0; i < days; i++) {
-      const date = plans[0].forecast[i]?.date || '';
-      const totalDemand = plans.reduce((sum, plan) => sum + (plan.forecast[i]?.projectedDemand || 0), 0);
-      const totalSupply = plans.reduce((sum, plan) => sum + (plan.forecast[i]?.projectedSupply || 0), 0);
-      result.push({
-        date,
-        projectedDemand: totalDemand,
-        projectedSupply: totalSupply,
-        projectedGap: totalDemand - totalSupply,
-      });
-    }
-    return result;
-  }, [plans]);
+    return getAggregatedForecast();
+  }, [allPlans, searchKeyword, yearFilter, semesterFilter, getAggregatedForecast]);
+
+  const filteredPlans = useMemo(() => {
+    const filtered = getFilteredPlans();
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    return filtered.slice(start, end);
+  }, [allPlans, searchKeyword, yearFilter, semesterFilter, page, pageSize, getFilteredPlans]);
+
+  const totalPages = useMemo(() => {
+    const filtered = getFilteredPlans();
+    return Math.ceil(filtered.length / pageSize);
+  }, [allPlans, searchKeyword, yearFilter, semesterFilter, pageSize, getFilteredPlans]);
+
+  const totalFilteredCount = useMemo(() => {
+    return getFilteredPlans().length;
+  }, [allPlans, searchKeyword, yearFilter, semesterFilter, getFilteredPlans]);
 
   const chartOption = useMemo(() => {
     const dates = forecastData.map((d) => d.date.slice(5));
@@ -274,48 +275,6 @@ export default function Enrollment() {
     };
   }, [forecastData]);
 
-  const filteredPlans = useMemo(() => {
-    let filtered = [...plans];
-
-    if (searchKeyword) {
-      filtered = filtered.filter((p) =>
-        p.institutionName.toLowerCase().includes(searchKeyword.toLowerCase())
-      );
-    }
-
-    if (yearFilter) {
-      filtered = filtered.filter((p) => p.year === yearFilter);
-    }
-
-    if (semesterFilter) {
-      filtered = filtered.filter((p) => p.semester === semesterFilter);
-    }
-
-    const start = (page - 1) * pageSize;
-    const end = start + pageSize;
-    return filtered.slice(start, end);
-  }, [plans, page, pageSize, searchKeyword, yearFilter, semesterFilter]);
-
-  const totalPages = useMemo(() => {
-    let filtered = [...plans];
-
-    if (searchKeyword) {
-      filtered = filtered.filter((p) =>
-        p.institutionName.toLowerCase().includes(searchKeyword.toLowerCase())
-      );
-    }
-
-    if (yearFilter) {
-      filtered = filtered.filter((p) => p.year === yearFilter);
-    }
-
-    if (semesterFilter) {
-      filtered = filtered.filter((p) => p.semester === semesterFilter);
-    }
-
-    return Math.ceil(filtered.length / pageSize);
-  }, [plans, pageSize, searchKeyword, yearFilter, semesterFilter]);
-
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -360,14 +319,34 @@ export default function Enrollment() {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      console.log('解析到的数据:', jsonData);
+      const jsonData = XLSX.utils.sheet_to_json(worksheet) as Array<Record<string, any>>;
 
-      const result = await uploadPlan(file);
+      const plans: EnrollmentPlan[] = jsonData.map((row, index) => {
+        const institutionName = row['机构名称'] || row['institutionName'] || `机构${index + 1}`;
+        const year = Number(row['年度'] || row['year'] || 2025);
+        const semester = (row['学期'] || row['semester'] || 'spring') as 'spring' | 'autumn';
+        const plannedCapacity = Number(row['计划学位数'] || row['plannedCapacity'] || 0);
+        const actualEnrollment = Math.floor(plannedCapacity * (0.7 + Math.random() * 0.2));
+        const enrollmentRate = parseFloat(((actualEnrollment / plannedCapacity) * 100).toFixed(1)) || 0;
+        const forecast = generateForecast(plannedCapacity);
+
+        return {
+          id: `plan_${Date.now()}_${index}`,
+          institutionId: `inst_${institutionName}`,
+          institutionName,
+          year,
+          semester,
+          plannedCapacity,
+          actualEnrollment,
+          enrollmentRate,
+          forecast,
+        };
+      });
+
+      const result = await uploadPlan(plans);
       if (result.success) {
         setUploadStatus('success');
         setUploadMessage(result.message || '上传成功');
-        fetchPlans();
       } else {
         setUploadStatus('error');
         setUploadMessage(result.message || '上传失败');
@@ -721,7 +700,7 @@ export default function Enrollment() {
             {totalPages > 0 && (
               <div className="flex items-center justify-between mt-6 pt-4 border-t border-neutral-100">
                 <div className="text-sm text-neutral-500">
-                  共 <span className="font-medium text-neutral-700">{getFilteredPlans().length}</span> 条记录，
+                  共 <span className="font-medium text-neutral-700">{totalFilteredCount}</span> 条记录，
                   第 <span className="font-medium text-neutral-700">{page}</span> / {totalPages} 页
                 </div>
                 <div className="flex items-center gap-1">

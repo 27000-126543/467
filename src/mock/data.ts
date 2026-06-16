@@ -397,90 +397,141 @@ export function generateEnrollmentPlans(): EnrollmentPlan[] {
 
 export const mockEnrollmentPlans = generateEnrollmentPlans();
 
-export function generateReports(count = 12): OperationReport[] {
-  const reports: OperationReport[] = [];
+function generateSingleReport(
+  id: string,
+  regionCode: string,
+  regionName: string,
+  weeksAgo: number,
+  period: 'week' | 'month' = 'week'
+): OperationReport {
   const now = new Date();
+  const daysInPeriod = period === 'week' ? 7 : 30;
+  const startDate = new Date(now.getTime() - (weeksAgo * daysInPeriod + daysInPeriod) * 24 * 60 * 60 * 1000);
+  const endDate = new Date(startDate.getTime() + (daysInPeriod - 1) * 24 * 60 * 60 * 1000);
 
-  for (let i = 0; i < count; i++) {
-    const startDate = new Date(now.getTime() - (i * 7 + 7) * 24 * 60 * 60 * 1000);
-    const endDate = new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const recommendations = [
+    {
+      id: 'rec1',
+      priority: 'high' as const,
+      category: 'class_size' as const,
+      content: '建议将大班额班级拆分为小班，每班人数控制在25人以内',
+      expectedImpact: '预计可降低健康异常率约25%，提升师生比达标率',
+    },
+    {
+      id: 'rec2',
+      priority: 'medium' as const,
+      category: 'diet' as const,
+      content: '优化膳食结构，增加蔬菜和水果种类，减少高糖食物',
+      expectedImpact: '预计营养达标率可提升5-8个百分点',
+    },
+    {
+      id: 'rec3',
+      priority: 'high' as const,
+      category: 'staffing' as const,
+      content: '建议补充3-5名专业教师，确保师生比达到1:7标准',
+      expectedImpact: '可有效降低师生比预警，提升教学质量',
+    },
+    {
+      id: 'rec4',
+      priority: 'low' as const,
+      category: 'health' as const,
+      content: '加强晨检制度，增加每日健康巡检频次',
+      expectedImpact: '有助于早期发现健康问题，降低传染风险',
+    },
+  ];
 
-    const recommendations = [
-      {
-        id: 'rec1',
-        priority: 'high' as const,
-        category: 'class_size' as const,
-        content: '建议将大班额班级拆分为小班，每班人数控制在25人以内',
-        expectedImpact: '预计可降低健康异常率约25%，提升师生比达标率',
-      },
-      {
-        id: 'rec2',
-        priority: 'medium' as const,
-        category: 'diet' as const,
-        content: '优化膳食结构，增加蔬菜和水果种类，减少高糖食物',
-        expectedImpact: '预计营养达标率可提升5-8个百分点',
-      },
-      {
-        id: 'rec3',
-        priority: 'high' as const,
-        category: 'staffing' as const,
-        content: '建议补充3-5名专业教师，确保师生比达到1:7标准',
-        expectedImpact: '可有效降低师生比预警，提升教学质量',
-      },
-      {
-        id: 'rec4',
-        priority: 'low' as const,
-        category: 'health' as const,
-        content: '加强晨检制度，增加每日健康巡检频次',
-        expectedImpact: '有助于早期发现健康问题，降低传染风险',
-      },
-    ];
-
-    const attendanceTrend = [];
-    for (let d = 0; d < 7; d++) {
-      attendanceTrend.push({
-        date: formatDate(new Date(startDate.getTime() + d * 24 * 60 * 60 * 1000)),
-        rate: randomFloat(88, 96),
-      });
-    }
-
-    reports.push({
-      id: generateId('report', count - i),
-      regionCode: 'national',
-      regionName: '全国',
-      period: 'week',
-      periodStart: formatDate(startDate),
-      periodEnd: formatDate(endDate),
-      metrics: {
-        attendanceRate: { value: randomFloat(90, 95), yoy: randomFloat(-2, 3), mom: randomFloat(-1, 2) },
-        healthAbnormalRate: { value: randomFloat(2, 5), yoy: randomFloat(-1, 2), mom: randomFloat(-0.5, 1) },
-        teacherStudentRatio: { value: randomFloat(0.1, 0.15), yoy: randomFloat(-0.02, 0.02), mom: randomFloat(-0.01, 0.01) },
-        nutritionComplianceRate: { value: randomFloat(85, 95), yoy: randomFloat(-3, 5), mom: randomFloat(-2, 3) },
-      },
-      analysis: {
-        healthAbnormalReasons: [
-          { reason: '感冒发烧', count: randomInt(100, 300), percentage: randomFloat(35, 45) },
-          { reason: '咳嗽', count: randomInt(80, 200), percentage: randomFloat(25, 35) },
-          { reason: '腹泻', count: randomInt(30, 80), percentage: randomFloat(10, 15) },
-          { reason: '其他', count: randomInt(20, 60), percentage: randomFloat(8, 15) },
-        ],
-        teacherRatioRanking: mockInstitutions.slice(0, 10).map((inst, idx) => ({
-          rank: idx + 1,
-          institutionName: inst.name,
-          ratio: parseFloat((inst.teacherCount / inst.studentCount).toFixed(3)),
-          level: inst.level,
-        })),
-        attendanceTrend,
-      },
-      recommendations: recommendations.slice(0, randomInt(2, 4)),
-      generatedAt: formatDateTime(new Date(endDate.getTime() + 12 * 60 * 60 * 1000)),
+  const attendanceTrend = [];
+  const trendDays = period === 'week' ? 7 : 30;
+  for (let d = 0; d < trendDays; d++) {
+    attendanceTrend.push({
+      date: formatDate(new Date(startDate.getTime() + d * 24 * 60 * 60 * 1000)),
+      rate: randomFloat(88, 96),
     });
+  }
+
+  const regionInstitutions = regionCode === 'national'
+    ? mockInstitutions
+    : mockInstitutions.filter((i) =>
+        i.address.province === regionName || i.address.city === regionName
+      );
+  const rankingInstitutions = regionInstitutions.length > 0
+    ? regionInstitutions.slice(0, 10)
+    : mockInstitutions.slice(0, 10);
+
+  return {
+    id,
+    regionCode,
+    regionName,
+    period,
+    periodStart: formatDate(startDate),
+    periodEnd: formatDate(endDate),
+    metrics: {
+      attendanceRate: { value: randomFloat(90, 95), yoy: randomFloat(-2, 3), mom: randomFloat(-1, 2) },
+      healthAbnormalRate: { value: randomFloat(2, 5), yoy: randomFloat(-1, 2), mom: randomFloat(-0.5, 1) },
+      teacherStudentRatio: { value: randomFloat(0.1, 0.15), yoy: randomFloat(-0.02, 0.02), mom: randomFloat(-0.01, 0.01) },
+      nutritionComplianceRate: { value: randomFloat(85, 95), yoy: randomFloat(-3, 5), mom: randomFloat(-2, 3) },
+    },
+    analysis: {
+      healthAbnormalReasons: [
+        { reason: '感冒发烧', count: randomInt(50, 200), percentage: randomFloat(35, 45) },
+        { reason: '咳嗽', count: randomInt(40, 150), percentage: randomFloat(25, 35) },
+        { reason: '腹泻', count: randomInt(20, 60), percentage: randomFloat(10, 15) },
+        { reason: '其他', count: randomInt(10, 40), percentage: randomFloat(8, 15) },
+      ],
+      teacherRatioRanking: rankingInstitutions.map((inst, idx) => ({
+        rank: idx + 1,
+        institutionName: inst.name,
+        ratio: parseFloat((inst.teacherCount / inst.studentCount).toFixed(3)),
+        level: inst.level,
+      })),
+      attendanceTrend,
+    },
+    recommendations: recommendations.slice(0, randomInt(2, 4)),
+    generatedAt: formatDateTime(new Date(endDate.getTime() + 12 * 60 * 60 * 1000)),
+  };
+}
+
+export function generateReports(): OperationReport[] {
+  const reports: OperationReport[] = [];
+  let reportIndex = 1;
+
+  for (let i = 0; i < 4; i++) {
+    reports.push(generateSingleReport(
+      generateId('report', reportIndex++),
+      'national',
+      '全国',
+      i,
+      i === 0 ? 'month' : 'week'
+    ));
+  }
+
+  for (const prov of provinces) {
+    for (let i = 0; i < 2; i++) {
+      reports.push(generateSingleReport(
+        generateId('report', reportIndex++),
+        prov.name,
+        prov.name,
+        i,
+        i === 0 ? 'month' : 'week'
+      ));
+    }
+    for (const city of prov.cities) {
+      for (let i = 0; i < 2; i++) {
+        reports.push(generateSingleReport(
+          generateId('report', reportIndex++),
+          city,
+          city,
+          i,
+          i === 0 ? 'month' : 'week'
+        ));
+      }
+    }
   }
 
   return reports;
 }
 
-export const mockReports = generateReports(10);
+export const mockReports = generateReports();
 
 export const mockAlertConfig: AlertConfig = {
   healthAbnormalThreshold: 5,

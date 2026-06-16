@@ -24,6 +24,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import StatCard from '@/components/common/StatCard';
 import { mockReports } from '@/mock/data';
+import { useAuthStore } from '@/store/auth';
 import {
   formatPercent,
   formatDate,
@@ -50,7 +51,21 @@ export default function Reports() {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
   const filteredReports = useMemo(() => {
+    const user = useAuthStore.getState().user;
+
     return mockReports.filter((report) => {
+      if (user && user.role !== 'national') {
+        if (user.role === 'provincial' && user.region.province) {
+          if (report.regionName !== user.region.province) {
+            return false;
+          }
+        } else if (user.role === 'municipal' && user.region.city) {
+          if (report.regionName !== user.region.city) {
+            return false;
+          }
+        }
+      }
+
       if (periodFilter !== 'all' && report.period !== periodFilter) {
         return false;
       }
