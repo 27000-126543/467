@@ -20,6 +20,9 @@ import {
   UserCheck,
   FileCheck,
   ExternalLink,
+  Wrench,
+  Target,
+  TrendingUp,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAlertsStore } from '@/store/alerts';
@@ -41,13 +44,22 @@ import type { AlertStatus } from '@/types';
 export default function AlertDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { selectedAlert, loading, fetchAlertById, processAlert, escalateAlert } = useAlertsStore();
+  const { selectedAlert, loading, fetchAlertById, processAlert, escalateAlert, createRectificationTask, updateRectificationTask, completeRectificationTask } = useAlertsStore();
 
   const [processStatus, setProcessStatus] = useState<AlertStatus>('processing');
   const [processNote, setProcessNote] = useState('');
   const [showEscalateModal, setShowEscalateModal] = useState(false);
   const [escalateReason, setEscalateReason] = useState('');
   const [processing, setProcessing] = useState(false);
+
+  const [showRectificationModal, setShowRectificationModal] = useState(false);
+  const [rectificationDescription, setRectificationDescription] = useState('');
+  const [rectificationResponsible, setRectificationResponsible] = useState('');
+  const [rectificationDeadline, setRectificationDeadline] = useState('');
+  const [rectificationProgress, setRectificationProgress] = useState(0);
+  const [rectificationNotes, setRectificationNotes] = useState('');
+  const [rectificationMode, setRectificationMode] = useState<'create' | 'edit' | 'complete'>('create');
+  const [completeResolution, setCompleteResolution] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -327,6 +339,74 @@ export default function AlertDetail() {
     if (success) {
       setShowEscalateModal(false);
       setEscalateReason('');
+    }
+  };
+
+  const handleOpenCreateRectification = () => {
+    setRectificationMode('create');
+    setRectificationDescription('');
+    setRectificationResponsible('');
+    setRectificationDeadline('');
+    setRectificationProgress(0);
+    setRectificationNotes('');
+    setShowRectificationModal(true);
+  };
+
+  const handleOpenEditRectification = () => {
+    if (!selectedAlert?.rectificationTask) return;
+    setRectificationMode('edit');
+    setRectificationDescription(selectedAlert.rectificationTask.description);
+    setRectificationResponsible(selectedAlert.rectificationTask.responsiblePerson);
+    setRectificationDeadline(selectedAlert.rectificationTask.deadline);
+    setRectificationProgress(selectedAlert.rectificationTask.progress);
+    setRectificationNotes(selectedAlert.rectificationTask.notes || '');
+    setShowRectificationModal(true);
+  };
+
+  const handleOpenCompleteRectification = () => {
+    setRectificationMode('complete');
+    setCompleteResolution('');
+    setShowRectificationModal(true);
+  };
+
+  const handleCreateRectification = async () => {
+    if (!selectedAlert || !rectificationDescription.trim()) return;
+    setProcessing(true);
+    const success = await createRectificationTask(selectedAlert.id, {
+      description: rectificationDescription,
+      responsiblePerson: rectificationResponsible,
+      deadline: rectificationDeadline,
+      notes: rectificationNotes,
+    });
+    setProcessing(false);
+    if (success) {
+      setShowRectificationModal(false);
+    }
+  };
+
+  const handleUpdateRectification = async () => {
+    if (!selectedAlert) return;
+    setProcessing(true);
+    const success = await updateRectificationTask(selectedAlert.id, {
+      description: rectificationDescription,
+      responsiblePerson: rectificationResponsible,
+      deadline: rectificationDeadline,
+      progress: rectificationProgress,
+      notes: rectificationNotes,
+    });
+    setProcessing(false);
+    if (success) {
+      setShowRectificationModal(false);
+    }
+  };
+
+  const handleCompleteRectification = async () => {
+    if (!selectedAlert || !completeResolution.trim()) return;
+    setProcessing(true);
+    const success = await completeRectificationTask(selectedAlert.id, completeResolution);
+    setProcessing(false);
+    if (success) {
+      setShowRectificationModal(false);
     }
   };
 
@@ -726,6 +806,110 @@ export default function AlertDetail() {
             </div>
           )}
 
+          {(selectedAlert.status === 'escalated' || selectedAlert.rectificationTask) && (
+            <div className="bg-white rounded-2xl shadow-card p-6 border border-neutral-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-success-50 flex items-center justify-center">
+                  <Wrench className="w-5 h-5 text-success-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-neutral-800">整改任务</h3>
+                  <p className="text-xs text-neutral-500">
+                    {selectedAlert.rectificationTask ? '跟踪整改进度' : '审批通过后启动整改'}
+                  </p>
+                </div>
+              </div>
+
+              {selectedAlert.rectificationTask ? (
+                <div className="space-y-4">
+                  <div>
+                    <span className="text-sm text-neutral-500">整改措施</span>
+                    <p className="text-sm text-neutral-700 mt-1">
+                      {selectedAlert.rectificationTask.description}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-neutral-500">责任人</span>
+                    <span className="text-sm font-medium text-neutral-700">
+                      {selectedAlert.rectificationTask.responsiblePerson || '-'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-neutral-500">预计完成</span>
+                    <span className="text-sm font-medium text-neutral-700">
+                      {selectedAlert.rectificationTask.deadline || '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm text-neutral-500">整改进度</span>
+                      <span className="text-sm font-medium text-neutral-700">
+                        {selectedAlert.rectificationTask.progress}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-neutral-100 rounded-full h-2">
+                      <div
+                        className={cn(
+                          'h-2 rounded-full transition-all',
+                          selectedAlert.rectificationTask.progress === 100
+                            ? 'bg-success-500'
+                            : 'bg-warning-500'
+                        )}
+                        style={{ width: `${selectedAlert.rectificationTask.progress}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-neutral-500">状态</span>
+                    <span className={cn(
+                      'px-2 py-0.5 text-xs font-medium rounded-full',
+                      selectedAlert.rectificationTask.status === 'completed'
+                        ? 'bg-success-50 text-success-600'
+                        : selectedAlert.rectificationTask.status === 'in_progress'
+                        ? 'bg-warning-50 text-warning-600'
+                        : 'bg-neutral-50 text-neutral-600'
+                    )}>
+                      {selectedAlert.rectificationTask.status === 'completed' ? '已完成' :
+                       selectedAlert.rectificationTask.status === 'in_progress' ? '进行中' : '待启动'}
+                    </span>
+                  </div>
+
+                  {selectedAlert.rectificationTask.status !== 'completed' && (
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={handleOpenEditRectification}
+                        className="flex-1 px-3 py-2 bg-primary-50 text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors"
+                      >
+                        更新进度
+                      </button>
+                      <button
+                        onClick={handleOpenCompleteRectification}
+                        className="flex-1 px-3 py-2 bg-success-50 text-success-600 rounded-lg text-sm font-medium hover:bg-success-100 transition-colors"
+                      >
+                        完成整改
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-neutral-50 flex items-center justify-center">
+                    <Target className="w-6 h-6 text-neutral-400" />
+                  </div>
+                  <p className="text-sm text-neutral-500 mb-3">审批通过后可创建整改任务</p>
+                  {selectedAlert.approvalStatus === 'approved' && (
+                    <button
+                      onClick={handleOpenCreateRectification}
+                      className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors"
+                    >
+                      创建整改任务
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {(selectedAlert.status === 'pending' || selectedAlert.status === 'processing') && (
             <div className="bg-white rounded-2xl shadow-card p-6 border border-neutral-100">
               <div className="flex items-center gap-3 mb-6">
@@ -851,6 +1035,159 @@ export default function AlertDetail() {
               >
                 {processing && <Loader2 className="w-4 h-4 animate-spin" />}
                 确认升级
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showRectificationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 shadow-2xl max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-success-50 flex items-center justify-center">
+                <Wrench className="w-6 h-6 text-success-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-neutral-800">
+                  {rectificationMode === 'create' ? '创建整改任务' :
+                   rectificationMode === 'edit' ? '更新整改进度' : '完成整改'}
+                </h3>
+                <p className="text-sm text-neutral-500">
+                  {rectificationMode === 'create' ? '制定整改措施和计划' :
+                   rectificationMode === 'edit' ? '更新整改进度和状态' : '确认整改完成并关闭预警'}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {rectificationMode !== 'complete' && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-neutral-700 mb-1.5 block">
+                      整改措施 <span className="text-danger-500">*</span>
+                    </label>
+                    <textarea
+                      value={rectificationDescription}
+                      onChange={(e) => setRectificationDescription(e.target.value)}
+                      placeholder="请详细描述整改措施..."
+                      rows={3}
+                      className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-neutral-700 mb-1.5 block">
+                        责任人
+                      </label>
+                      <input
+                        type="text"
+                        value={rectificationResponsible}
+                        onChange={(e) => setRectificationResponsible(e.target.value)}
+                        placeholder="请输入责任人姓名"
+                        className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-2.5 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-neutral-700 mb-1.5 block">
+                        预计完成时间
+                      </label>
+                      <input
+                        type="date"
+                        value={rectificationDeadline}
+                        onChange={(e) => setRectificationDeadline(e.target.value)}
+                        className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-2.5 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {rectificationMode === 'edit' && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-sm font-medium text-neutral-700">
+                          整改进度
+                        </label>
+                        <span className="text-sm font-medium text-primary-600">
+                          {rectificationProgress}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="10"
+                        value={rectificationProgress}
+                        onChange={(e) => setRectificationProgress(Number(e.target.value))}
+                        className="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-sm font-medium text-neutral-700 mb-1.5 block">
+                      阶段进展备注
+                    </label>
+                    <textarea
+                      value={rectificationNotes}
+                      onChange={(e) => setRectificationNotes(e.target.value)}
+                      placeholder="请填写当前阶段进展情况..."
+                      rows={3}
+                      className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all resize-none"
+                    />
+                  </div>
+                </>
+              )}
+
+              {rectificationMode === 'complete' && (
+                <div>
+                  <label className="text-sm font-medium text-neutral-700 mb-1.5 block">
+                    整改完成说明 <span className="text-danger-500">*</span>
+                  </label>
+                  <textarea
+                    value={completeResolution}
+                    onChange={(e) => setCompleteResolution(e.target.value)}
+                    placeholder="请详细说明整改完成情况和最终结果..."
+                    rows={4}
+                    className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-3 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all resize-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowRectificationModal(false)}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-neutral-600 bg-neutral-100 rounded-xl hover:bg-neutral-200 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={
+                  rectificationMode === 'create' ? handleCreateRectification :
+                  rectificationMode === 'edit' ? handleUpdateRectification :
+                  handleCompleteRectification
+                }
+                disabled={
+                  processing ||
+                  (rectificationMode !== 'complete' && !rectificationDescription.trim()) ||
+                  (rectificationMode === 'complete' && !completeResolution.trim())
+                }
+                className={cn(
+                  'flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-xl transition-colors flex items-center justify-center gap-2',
+                  (rectificationMode !== 'complete' && !rectificationDescription.trim()) ||
+                  (rectificationMode === 'complete' && !completeResolution.trim()) || processing
+                    ? 'bg-primary-300 cursor-not-allowed'
+                    : 'bg-primary-500 hover:bg-primary-600'
+                )}
+              >
+                {processing && <Loader2 className="w-4 h-4 animate-spin" />}
+                {rectificationMode === 'create' ? '创建任务' :
+                 rectificationMode === 'edit' ? '保存更新' : '确认完成'}
               </button>
             </div>
           </motion.div>

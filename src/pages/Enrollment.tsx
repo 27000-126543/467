@@ -60,6 +60,8 @@ export default function Enrollment() {
     setPage,
     uploadPlan,
     previewPlan,
+    updatePreviewItem,
+    setDuplicateStrategy,
     confirmImport,
     clearPreview,
     getFilteredPlans,
@@ -1049,26 +1051,32 @@ export default function Enrollment() {
             </div>
 
             <div className="border border-neutral-200 rounded-xl overflow-hidden">
-              <div className="max-h-[400px] overflow-y-auto">
+              <div className="max-h-[450px] overflow-y-auto">
                 <table className="w-full">
                   <thead className="bg-neutral-50 sticky top-0">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                      <th className="px-3 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-14">
                         序号
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                      <th className="px-3 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
                         机构名称
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                      <th className="px-3 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-24">
                         年度
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                      <th className="px-3 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-24">
+                        学期
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-24">
                         计划学位
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                      <th className="px-3 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-28">
                         匹配机构
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                      <th className="px-3 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-32">
+                        重复处理
+                      </th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider w-20">
                         状态
                       </th>
                     </tr>
@@ -1082,44 +1090,86 @@ export default function Enrollment() {
                           item.errors.length > 0 ? 'bg-danger-50/30' : ''
                         )}
                       >
-                        <td className="px-4 py-3 text-sm text-neutral-500">
+                        <td className="px-3 py-3 text-sm text-neutral-500">
                           {item.index}
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="text-sm font-medium text-neutral-800">
-                            {item.institutionName || <span className="text-danger-500">（空）</span>}
-                          </div>
-                          {item.errors.length > 0 && (
-                            <div className="mt-1 space-y-1">
+                        <td className="px-3 py-3">
+                          <input
+                            type="text"
+                            value={item.institutionName}
+                            onChange={(e) => updatePreviewItem(item.index, { institutionName: e.target.value })}
+                            placeholder="请输入机构名称"
+                            className={cn(
+                              'w-full px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all',
+                              item.errors.some(err => err.includes('机构名称'))
+                                ? 'border-danger-300 bg-danger-50'
+                                : 'border-neutral-200 bg-white'
+                            )}
+                          />
+                          {(item.errors.length > 0 || item.warnings.length > 0) && (
+                            <div className="mt-1 space-y-0.5">
                               {item.errors.map((err, idx) => (
-                                <div key={idx} className="flex items-center gap-1 text-xs text-danger-600">
-                                  <AlertCircle className="w-3 h-3" />
+                                <div key={`e-${idx}`} className="flex items-center gap-1 text-xs text-danger-600">
+                                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
                                   {err}
                                 </div>
                               ))}
-                            </div>
-                          )}
-                          {item.warnings.length > 0 && (
-                            <div className="mt-1 space-y-1">
                               {item.warnings.map((warn, idx) => (
-                                <div key={idx} className="flex items-center gap-1 text-xs text-warning-600">
-                                  <AlertTriangle className="w-3 h-3" />
+                                <div key={`w-${idx}`} className="flex items-center gap-1 text-xs text-warning-600">
+                                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                                   {warn}
                                 </div>
                               ))}
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-sm text-neutral-700">
-                          {item.year || '-'}
+                        <td className="px-3 py-3">
+                          <input
+                            type="number"
+                            value={item.year || ''}
+                            onChange={(e) => updatePreviewItem(item.index, { year: parseInt(e.target.value) || 0 })}
+                            placeholder="年度"
+                            className={cn(
+                              'w-full px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all',
+                              item.errors.some(err => err.includes('年度'))
+                                ? 'border-danger-300 bg-danger-50'
+                                : 'border-neutral-200 bg-white'
+                            )}
+                          />
                         </td>
-                        <td className="px-4 py-3 text-sm text-neutral-700">
-                          {item.plannedCapacity !== null ? item.plannedCapacity : <span className="text-danger-500">-</span>}
+                        <td className="px-3 py-3">
+                          <select
+                            value={item.semester}
+                            onChange={(e) => updatePreviewItem(item.index, { semester: e.target.value as 'spring' | 'autumn' })}
+                            className="w-full px-2 py-1.5 text-sm border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all"
+                          >
+                            <option value="spring">春季</option>
+                            <option value="autumn">秋季</option>
+                          </select>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3">
+                          <input
+                            type="number"
+                            value={item.plannedCapacity ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updatePreviewItem(item.index, { 
+                                plannedCapacity: val === '' ? null : parseFloat(val) 
+                              });
+                            }}
+                            placeholder="学位数"
+                            className={cn(
+                              'w-full px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-400 transition-all',
+                              item.errors.some(err => err.includes('计划学位'))
+                                ? 'border-danger-300 bg-danger-50'
+                                : 'border-neutral-200 bg-white'
+                            )}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
                           {item.matchedInstitution ? (
                             <div>
-                              <div className="text-sm font-medium text-neutral-800">
+                              <div className="text-sm font-medium text-neutral-800 truncate">
                                 {item.matchedInstitution.name}
                               </div>
                               <div className="text-xs text-neutral-500">
@@ -1132,10 +1182,25 @@ export default function Enrollment() {
                               新机构
                             </span>
                           ) : (
-                            <span className="text-neutral-400">-</span>
+                            <span className="text-neutral-400 text-sm">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3">
+                          {item.isDuplicate ? (
+                            <select
+                              value={item.duplicateStrategy || 'skip'}
+                              onChange={(e) => setDuplicateStrategy(item.index, e.target.value as any)}
+                              className="w-full px-2 py-1.5 text-sm border border-warning-300 rounded-lg bg-warning-50 text-warning-700 focus:outline-none focus:ring-2 focus:ring-warning-200 focus:border-warning-400 transition-all"
+                            >
+                              <option value="skip">跳过</option>
+                              <option value="overwrite">覆盖</option>
+                              <option value="new_semester">作为新学期</option>
+                            </select>
+                          ) : (
+                            <span className="text-neutral-400 text-sm">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3">
                           {item.errors.length > 0 ? (
                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-danger-50 text-danger-700 text-xs font-medium rounded-full">
                               <XCircle className="w-3 h-3" />

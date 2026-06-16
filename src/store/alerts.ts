@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Alert, AlertStatus, AlertLevel, AlertType } from '@/types';
+import type { Alert, AlertStatus, AlertLevel, AlertType, RectificationTask } from '@/types';
 import { mockAlerts, mockInstitutions } from '@/mock/data';
 import { useAuthStore } from '@/store/auth';
 import { useApprovalsStore } from '@/store/approvals';
@@ -34,6 +34,12 @@ interface AlertsState {
   escalateAlert: (id: string, escalationReason: string, handlerName?: string) => Promise<boolean>;
   
   updateAlert: (id: string, updates: Partial<Alert>) => void;
+
+  createRectificationTask: (alertId: string, task: Partial<RectificationTask>) => Promise<boolean>;
+
+  updateRectificationTask: (alertId: string, updates: Partial<RectificationTask>) => Promise<boolean>;
+
+  completeRectificationTask: (alertId: string, resolution: string, handlerName?: string) => Promise<boolean>;
   
   setFilters: (filters: Partial<{
     status: AlertStatus | 'all';
@@ -250,6 +256,94 @@ export const useAlertsStore = create<AlertsState>()(
         });
       },
 
+      createRectificationTask: async (alertId, task) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        get().initAlerts();
+        const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+        set((state) => {
+          const newAlerts = state.allAlerts.map((a) => {
+            if (a.id !== alertId) return a;
+            const newTask: RectificationTask = {
+              id: `rect_${Date.now()}`,
+              alertId,
+              description: task.description || '',
+              responsiblePerson: task.responsiblePerson || '',
+              deadline: task.deadline || '',
+              progress: 0,
+              status: 'in_progress',
+              createdAt: now,
+              updatedAt: now,
+              notes: task.notes,
+            };
+            return { ...a, rectificationTask: newTask };
+          });
+          const updated = newAlerts.find((a) => a.id === alertId) || null;
+          return {
+            allAlerts: newAlerts,
+            selectedAlert: state.selectedAlert?.id === alertId ? updated : state.selectedAlert,
+          };
+        });
+        return true;
+      },
+
+      updateRectificationTask: async (alertId, updates) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        get().initAlerts();
+        const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+        set((state) => {
+          const newAlerts = state.allAlerts.map((a) => {
+            if (a.id !== alertId || !a.rectificationTask) return a;
+            const updatedTask = {
+              ...a.rectificationTask,
+              ...updates,
+              updatedAt: now,
+            };
+            return { ...a, rectificationTask: updatedTask };
+          });
+          const updated = newAlerts.find((a) => a.id === alertId) || null;
+          return {
+            allAlerts: newAlerts,
+            selectedAlert: state.selectedAlert?.id === alertId ? updated : state.selectedAlert,
+          };
+        });
+        return true;
+      },
+
+      completeRectificationTask: async (alertId, resolution, handlerName) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        get().initAlerts();
+        const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const operator = handlerName || '系统管理员';
+
+        set((state) => {
+          const newAlerts = state.allAlerts.map((a) => {
+            if (a.id !== alertId || !a.rectificationTask) return a;
+            const completedTask = {
+              ...a.rectificationTask,
+              status: 'completed' as const,
+              progress: 100,
+              updatedAt: now,
+            };
+            return {
+              ...a,
+              status: 'resolved' as const,
+              resolvedAt: now,
+              resolution,
+              handlerName: operator,
+              rectificationTask: completedTask,
+            };
+          });
+          const updated = newAlerts.find((a) => a.id === alertId) || null;
+          return {
+            allAlerts: newAlerts,
+            selectedAlert: state.selectedAlert?.id === alertId ? updated : state.selectedAlert,
+          };
+        });
+        return true;
+      },
+
       setFilters: (filters) => {
         set((state) => ({
           statusFilter: filters.status ?? state.statusFilter,
@@ -321,9 +415,9 @@ export const useAlertsStore = create<AlertsState>()(
     }),
     {
       name: 'alerts-storage',
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
-        if (version < 2) {
+        if (version < 3) {
           return null;
         }
         return persistedState;

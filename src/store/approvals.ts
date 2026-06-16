@@ -38,6 +38,8 @@ interface ApprovalsState {
   
   rejectApproval: (id: string, comment: string, handlerName?: string) => Promise<boolean>;
   
+  resubmitApproval: (id: string, rectificationNote: string, handlerName?: string) => Promise<boolean>;
+  
   createEscalationApproval: (alert: Alert, escalationReason: string, handlerName?: string) => Promise<Approval | null>;
   
   setActiveTab: (tab: TabType) => void;
@@ -320,6 +322,66 @@ export const useApprovalsStore = create<ApprovalsState>()(
         return true;
       },
 
+      resubmitApproval: async (id, rectificationNote, handlerName) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+
+        get().initApprovals();
+        const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const operator = handlerName || '系统管理员';
+
+        set((state) => {
+          const newApprovals = state.allApprovals.map((a) => {
+            if (a.id !== id) return a;
+            if (a.status !== 'rejected') return a;
+
+            const newStages = a.stages.map((s) => ({
+              ...s,
+              status: s.stage === 1 ? 'pending' as const : s.status,
+            }));
+
+            const historyRecord = {
+              stage: a.currentStage,
+              role: '申请人',
+              status: 'resubmitted' as const,
+              comment: rectificationNote,
+              handledAt: now,
+              handlerName: operator,
+            };
+
+            const newProcessHistory = [...(a.processHistory || []), historyRecord];
+            const newResubmitCount = (a.resubmitCount || 0) + 1;
+
+            return {
+              ...a,
+              status: 'pending_principal' as ApprovalStatus,
+              currentStage: 1,
+              stages: newStages,
+              processHistory: newProcessHistory,
+              rectificationNote,
+              resubmitCount: newResubmitCount,
+            };
+          });
+
+          const updated = newApprovals.find((a) => a.id === id) || null;
+
+          if (updated && updated.alertId) {
+            useAlertsStore.getState().updateAlert(updated.alertId, {
+              approvalStatus: 'pending_principal',
+              approvalResult: undefined,
+              approvalProcessedAt: undefined,
+            });
+          }
+
+          return {
+            allApprovals: newApprovals,
+            selectedApproval:
+              state.selectedApproval?.id === id ? updated : state.selectedApproval,
+          };
+        });
+
+        return true;
+      },
+
       createEscalationApproval: async (alert, escalationReason, handlerName) => {
         await new Promise((resolve) => setTimeout(resolve, 400));
 
@@ -362,6 +424,7 @@ export const useApprovalsStore = create<ApprovalsState>()(
             threshold: alert.threshold,
             actualValue: alert.actualValue,
             triggeredAt: alert.triggeredAt,
+            consecutiveDays: alert.consecutiveDays,
           },
           processHistory: [],
         };
@@ -480,9 +543,9 @@ export const useApprovalsStore = create<ApprovalsState>()(
     }),
     {
       name: 'approvals-storage',
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
-        if (version < 2) {
+        if (version < 3) {
           return null;
         }
         return persistedState;

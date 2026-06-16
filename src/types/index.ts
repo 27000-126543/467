@@ -136,6 +136,7 @@ export interface Alert {
   approvalStatus?: ApprovalStatus;
   approvalResult?: string;
   approvalProcessedAt?: string;
+  rectificationTask?: RectificationTask;
 }
 
 export type ApprovalType = 'class_adjustment' | 'enrollment_suspension' | 'alert_escalation';
@@ -149,11 +150,24 @@ export type ApprovalStatus =
 export interface ApprovalStage {
   stage: number;
   role: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'resubmitted';
   handlerId?: string;
   handlerName?: string;
   comment?: string;
   handledAt?: string;
+}
+
+export interface RectificationTask {
+  id: string;
+  alertId: string;
+  description: string;
+  responsiblePerson: string;
+  deadline: string;
+  progress: number;
+  status: 'pending' | 'in_progress' | 'completed';
+  createdAt: string;
+  updatedAt: string;
+  notes?: string;
 }
 
 export interface Approval {
@@ -177,8 +191,11 @@ export interface Approval {
     threshold: number;
     actualValue: number;
     triggeredAt: string;
+    consecutiveDays: number;
   };
   processHistory?: ApprovalStage[];
+  rectificationNote?: string;
+  resubmitCount?: number;
 }
 
 export type SemesterType = 'spring' | 'autumn';
@@ -293,10 +310,13 @@ export interface PaginatedResponse<T> {
   pageSize: number;
 }
 
+export type DuplicateStrategy = 'skip' | 'overwrite' | 'new_semester';
+
 export interface EnrollmentPlanPreviewItem {
   index: number;
   institutionName: string;
   year: number;
+  semester: SemesterType;
   plannedCapacity: number | null;
   matchedInstitution: {
     id: string;
@@ -307,6 +327,9 @@ export interface EnrollmentPlanPreviewItem {
   errors: string[];
   warnings: string[];
   rawData: Record<string, any>;
+  isDuplicate?: boolean;
+  duplicateStrategy?: DuplicateStrategy;
+  existingPlanId?: string;
 }
 
 export interface EnrollmentPlanPreview {

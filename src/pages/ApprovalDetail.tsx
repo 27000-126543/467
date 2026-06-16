@@ -46,12 +46,15 @@ export default function ApprovalDetail() {
     fetchApprovalById,
     approveApproval,
     rejectApproval,
+    resubmitApproval,
   } = useApprovalsStore();
 
   const [approveModalVisible, setApproveModalVisible] = useState(false);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [resubmitModalVisible, setResubmitModalVisible] = useState(false);
   const [approveComment, setApproveComment] = useState('');
   const [rejectComment, setRejectComment] = useState('');
+  const [rectificationNote, setRectificationNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -82,7 +85,6 @@ export default function ApprovalDetail() {
         ...selectedApproval.alertSnapshot,
         institutionId: selectedApproval.institutionId,
         institutionName: selectedApproval.institutionName,
-        consecutiveDays: 0,
         status: 'pending' as const,
       };
     }
@@ -119,6 +121,27 @@ export default function ApprovalDetail() {
         message.success('审批已驳回');
         setRejectModalVisible(false);
         setRejectComment('');
+      }
+    } catch (error) {
+      message.error('操作失败，请重试');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResubmit = async () => {
+    if (!id) return;
+    if (!rectificationNote.trim()) {
+      message.warning('请填写整改说明');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const success = await resubmitApproval(id, rectificationNote);
+      if (success) {
+        message.success('已重新提交审批');
+        setResubmitModalVisible(false);
+        setRectificationNote('');
       }
     } catch (error) {
       message.error('操作失败，请重试');
@@ -169,6 +192,8 @@ export default function ApprovalDetail() {
     selectedApproval.status === 'pending_district' ||
     selectedApproval.status === 'pending_city'
   );
+
+  const canResubmit = selectedApproval && selectedApproval.status === 'rejected';
 
   if (loading && !selectedApproval) {
     return (
@@ -268,6 +293,16 @@ export default function ApprovalDetail() {
                 通过
               </button>
             </div>
+          )}
+
+          {canResubmit && (
+            <button
+              onClick={() => setResubmitModalVisible(true)}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-warning-500 to-warning-600 rounded-xl hover:from-warning-600 hover:to-warning-700 transition-all shadow-sm hover:shadow-md"
+            >
+              <Send className="w-4 h-4" />
+              重新提交
+            </button>
           )}
         </div>
       </div>
@@ -708,6 +743,37 @@ export default function ApprovalDetail() {
             value={rejectComment}
             onChange={(e) => setRejectComment(e.target.value)}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        open={resubmitModalVisible}
+        title="重新提交审批"
+        onCancel={() => setResubmitModalVisible(false)}
+        onOk={handleResubmit}
+        confirmLoading={submitting}
+        okText="确认提交"
+        cancelText="取消"
+        okButtonProps={{
+          className:
+            '!bg-gradient-to-r !from-warning-500 !to-warning-600 hover:!from-warning-600 hover:!to-warning-700',
+        }}
+      >
+        <div className="space-y-4 mt-4">
+          <p className="text-sm text-neutral-600">
+            请填写整改说明，补充材料，重新提交后将从第一阶段重新审批。
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-2">
+              整改说明 <span className="text-danger-500">*</span>
+            </label>
+            <TextArea
+              rows={4}
+              placeholder="请详细说明整改措施和改进方案..."
+              value={rectificationNote}
+              onChange={(e) => setRectificationNote(e.target.value)}
+            />
+          </div>
         </div>
       </Modal>
     </motion.div>

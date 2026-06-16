@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { EnrollmentPlan, EnrollmentForecast, EnrollmentPlanPreview, EnrollmentPlanPreviewItem, EnrollmentSummary, EnrollmentSummaryItem, InstitutionType } from '@/types';
+import type { EnrollmentPlan, EnrollmentForecast, EnrollmentPlanPreview, EnrollmentPlanPreviewItem, EnrollmentSummary, EnrollmentSummaryItem, InstitutionType, DuplicateStrategy } from '@/types';
 import { mockEnrollmentPlans, mockInstitutions } from '@/mock/data';
 import { useAuthStore } from '@/store/auth';
 
@@ -24,6 +24,8 @@ interface EnrollmentState {
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
   previewPlan: (rawData: Record<string, any>[]) => EnrollmentPlanPreview;
+  updatePreviewItem: (index: number, updates: Partial<EnrollmentPlanPreviewItem>) => void;
+  setDuplicateStrategy: (index: number, strategy: DuplicateStrategy) => void;
   confirmImport: () => Promise<{ success: boolean; message?: string }>;
   clearPreview: () => void;
   uploadPlan: (plans: EnrollmentPlan[]) => Promise<{ success: boolean; message?: string }>;
@@ -80,17 +82,14 @@ export const useEnrollmentStore = create<EnrollmentState>()(
       },
 
       previewPlan: (rawData) => {
-        const existingCombinations = new Set(
-          get().allPlans.map((p) => `${p.institutionName}-${p.year}`)
-        );
-        const previewCombinations = new Set<string>();
-
         const items: EnrollmentPlanPreviewItem[] = rawData.map((row, index) => {
           const institutionName = String(row['机构名称'] || row['institutionName'] || '').trim();
           const yearStr = String(row['年度'] || row['year'] || '').trim();
+          const semesterStr = String(row['学期'] || row['semester'] || '春季').trim();
           const plannedCapacityStr = String(row['计划学位'] || row['plannedCapacity'] || '').trim();
 
           const year = yearStr ? parseInt(yearStr, 10) : 0;
+          const semester: 'spring' | 'autumn' = semesterStr.includes('秋') || semesterStr === 'autumn' ? 'autumn' : 'spring';
           const plannedCapacity = plannedCapacityStr ? parseFloat(plannedCapacityStr) : null;
 
           const errors: string[] = [];
@@ -118,21 +117,22 @@ export const useEnrollmentStore = create<EnrollmentState>()(
             warnings.push('该机构为新机构，导入后需完善机构信息');
           }
 
-          const combination = `${institutionName}-${year}`;
-          if (institutionName && !isNaN(year)) {
-            if (existingCombinations.has(combination)) {
-              warnings.push('该机构该年度计划已存在，将更新原有数据');
-            }
-            if (previewCombinations.has(combination)) {
-              errors.push('导入文件中存在重复的机构年度组合');
-            }
-            previewCombinations.add(combination);
+          let isDuplicate = false;
+          let existingPlanId: string | undefined;
+          const existingPlan = get().allPlans.find(
+            (p) => p.institutionName === institutionName && p.year === year && p.semester === semester
+          );
+          if (existingPlan) {
+            isDuplicate = true;
+            existingPlanId = existingPlan.id;
+            warnings.push('该机构该学期计划已存在');
           }
 
           return {
             index: index + 1,
             institutionName,
             year,
+            semester,
             plannedCapacity,
             matchedInstitution: matchedInstitution
               ? {
@@ -145,6 +145,9 @@ export const useEnrollmentStore = create<EnrollmentState>()(
             errors,
             warnings,
             rawData: row,
+            isDuplicate,
+            duplicateStrategy: isDuplicate ? 'skip' : undefined,
+            existingPlanId,
           };
         });
 
@@ -165,6 +168,106 @@ export const useEnrollmentStore = create<EnrollmentState>()(
         return preview;
       },
 
+      updatePreviewItem: (index, updates) => {
+        set((state) => {
+          if (!state.previewData) return state;
+
+          const newItems = state.previewData.items.map((item) => {
+            if (item.index !== index) return item;
+
+            const updatedItem = { ...item, ...updates };
+
+            const errors: string[] = [];
+            const warnings: string[] = [];
+
+            if (!updatedItem.institutionName) {
+              errors.push('机构名称不能为空');
+            }
+
+            if (isNaN(updatedItem.year) || updatedItem.year < 2020 || updatedItem.year > 2030) {
+              errors.push('年度必须是2020-2030之间的数字');
+            }
+
+            if (updatedItem.plannedCapacity === null || isNaN(updatedItem.plannedCapacity) || updatedItem.plannedCapacity < 0) {
+              errors.push('计划学位必须是非负数字');
+            }
+
+            const matchedInstitution = updatedItem.institutionName
+              ? mockInstitutions.find((inst) => inst.name === updatedItem.institutionName) || null
+              : null;
+
+            const isNewInstitution = updatedItem.institutionName ? !matchedInstitution : false;
+
+            if (updatedItem.institutionName && !matchedInstitution) {
+              warnings.push('该机构为新机构，导入后需完善机构信息');
+            }
+
+            let isDuplicate = false;
+            let existingPlanId: string | undefined;
+            const existingPlan = get().allPlans.find(
+              (p) => p.institutionName === updatedItem.institutionName && 
+                     p.year === updatedItem.year && 
+                     p.semester === updatedItem.semester
+            );
+            if (existingPlan) {
+              isDuplicate = true;
+              existingPlanId = existingPlan.id;
+              warnings.push('该机构该学期计划已存在');
+            }
+
+            return {
+              ...updatedItem,
+              matchedInstitution: matchedInstitution
+                ? {
+                    id: matchedInstitution.id,
+                    name: matchedInstitution.name,
+                    type: matchedInstitution.type,
+                  }
+                : null,
+              isNewInstitution,
+              errors,
+              warnings,
+              isDuplicate,
+              existingPlanId,
+              duplicateStrategy: isDuplicate ? (updatedItem.duplicateStrategy || 'skip') : undefined,
+            };
+          });
+
+          const validCount = newItems.filter((item) => item.errors.length === 0).length;
+          const invalidCount = newItems.filter((item) => item.errors.length > 0).length;
+          const warningCount = newItems.filter((item) => item.warnings.length > 0).length;
+          const hasErrors = invalidCount > 0;
+
+          return {
+            previewData: {
+              ...state.previewData,
+              items: newItems,
+              validCount,
+              invalidCount,
+              warningCount,
+              hasErrors,
+            },
+          };
+        });
+      },
+
+      setDuplicateStrategy: (index, strategy) => {
+        set((state) => {
+          if (!state.previewData) return state;
+
+          const newItems = state.previewData.items.map((item) =>
+            item.index === index ? { ...item, duplicateStrategy: strategy } : item
+          );
+
+          return {
+            previewData: {
+              ...state.previewData,
+              items: newItems,
+            },
+          };
+        });
+      },
+
       confirmImport: async () => {
         const preview = get().previewData;
         if (!preview) {
@@ -179,86 +282,96 @@ export const useEnrollmentStore = create<EnrollmentState>()(
 
         const validItems = preview.items.filter((item) => item.errors.length === 0);
 
-        const processedPlans: EnrollmentPlan[] = validItems.map((item) => {
-          const basePlan: EnrollmentPlan = {
-            id: `plan_${Date.now()}_${item.index}`,
-            institutionName: item.institutionName,
-            institutionId: item.matchedInstitution?.id || '',
-            year: item.year,
-            semester: 'spring',
-            plannedCapacity: item.plannedCapacity as number,
-            actualEnrollment: Math.floor((item.plannedCapacity as number) * (0.85 + Math.random() * 0.1)),
-            enrollmentRate: 85 + Math.random() * 10,
-            forecast: generateForecast(item.plannedCapacity as number),
-            createdAt: now,
-            updatedAt: now,
-          };
-
-          if (item.matchedInstitution) {
-            const matched = mockInstitutions.find((inst) => inst.id === item.matchedInstitution!.id);
-            return {
-              ...basePlan,
-              institutionId: item.matchedInstitution.id,
-              address: matched
-                ? {
-                    province: matched.address.province,
-                    city: matched.address.city,
-                    district: matched.address.district,
-                  }
-                : undefined,
-              isNewInstitution: false,
-            };
-          } else {
-            return {
-              ...basePlan,
-              uploadedByUserId: user?.id,
-              uploadedByRegion: user?.region
-                ? {
-                    province: user.region.province,
-                    city: user.region.city,
-                    district: user.region.district,
-                  }
-                : undefined,
-              isNewInstitution: true,
-            };
-          }
-        });
+        let newCount = 0;
+        let updatedCount = 0;
+        let skippedCount = 0;
 
         set((state) => {
-          const existingCombinations = new Map(
-            state.allPlans.map((p) => [`${p.institutionName}-${p.year}`, p.id])
-          );
+          let newPlans = [...state.allPlans];
 
-          const newPlans = processedPlans.filter((p) => {
-            const key = `${p.institutionName}-${p.year}`;
-            return !existingCombinations.has(key);
-          });
+          validItems.forEach((item) => {
+            const basePlan: EnrollmentPlan = {
+              id: `plan_${Date.now()}_${item.index}_${Math.random().toString(36).substr(2, 9)}`,
+              institutionName: item.institutionName,
+              institutionId: item.matchedInstitution?.id || '',
+              year: item.year,
+              semester: item.semester,
+              plannedCapacity: item.plannedCapacity as number,
+              actualEnrollment: Math.floor((item.plannedCapacity as number) * (0.85 + Math.random() * 0.1)),
+              enrollmentRate: 85 + Math.random() * 10,
+              forecast: generateForecast(item.plannedCapacity as number),
+              createdAt: now,
+              updatedAt: now,
+            };
 
-          const updatedPlans = state.allPlans.map((p) => {
-            const key = `${p.institutionName}-${p.year}`;
-            const matching = processedPlans.find((pp) => `${pp.institutionName}-${pp.year}` === key);
-            if (matching) {
-              return {
-                ...p,
-                plannedCapacity: matching.plannedCapacity,
-                actualEnrollment: matching.actualEnrollment,
-                enrollmentRate: matching.enrollmentRate,
-                forecast: matching.forecast,
-                updatedAt: now,
+            let planToAdd: EnrollmentPlan;
+            if (item.matchedInstitution) {
+              const matched = mockInstitutions.find((inst) => inst.id === item.matchedInstitution!.id);
+              planToAdd = {
+                ...basePlan,
+                institutionId: item.matchedInstitution.id,
+                address: matched
+                  ? {
+                      province: matched.address.province,
+                      city: matched.address.city,
+                      district: matched.address.district,
+                    }
+                  : undefined,
+                isNewInstitution: false,
+              };
+            } else {
+              planToAdd = {
+                ...basePlan,
+                uploadedByUserId: user?.id,
+                uploadedByRegion: user?.region
+                  ? {
+                      province: user.region.province,
+                      city: user.region.city,
+                      district: user.region.district,
+                    }
+                  : undefined,
+                isNewInstitution: true,
               };
             }
-            return p;
+
+            if (item.isDuplicate && item.existingPlanId) {
+              const strategy = item.duplicateStrategy || 'skip';
+              if (strategy === 'skip') {
+                skippedCount++;
+                return;
+              } else if (strategy === 'overwrite') {
+                newPlans = newPlans.map((p) =>
+                  p.id === item.existingPlanId
+                    ? {
+                        ...planToAdd,
+                        id: p.id,
+                        createdAt: p.createdAt,
+                        updatedAt: now,
+                      }
+                    : p
+                );
+                updatedCount++;
+              } else if (strategy === 'new_semester') {
+                const newSemester = item.semester === 'spring' ? 'autumn' : 'spring';
+                planToAdd = { ...planToAdd, semester: newSemester };
+                newPlans.push(planToAdd);
+                newCount++;
+              }
+            } else {
+              newPlans.push(planToAdd);
+              newCount++;
+            }
           });
 
           return {
-            allPlans: [...newPlans, ...updatedPlans],
+            allPlans: newPlans,
             previewData: null,
           };
         });
 
         return {
           success: true,
-          message: `导入成功，新增 ${validItems.length - (preview.items.length - preview.validCount)} 条，更新 ${preview.items.length - preview.validCount} 条`,
+          message: `导入成功，新增 ${newCount} 条，更新 ${updatedCount} 条，跳过 ${skippedCount} 条`,
         };
       },
 
@@ -658,9 +771,9 @@ export const useEnrollmentStore = create<EnrollmentState>()(
     }),
     {
       name: 'enrollment-storage',
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
-        if (version < 2) {
+        if (version < 3) {
           return null;
         }
         return persistedState;
