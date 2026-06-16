@@ -15,16 +15,24 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  ArrowRight,
+  BarChart3,
+  MapPin,
+  Building2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import StatCard from '@/components/common/StatCard';
 import { useEnrollmentStore, generateForecast } from '@/store/enrollment';
 import { mockInstitutions } from '@/mock/data';
 import { useAuthStore } from '@/store/auth';
-import { formatNumber, formatPercent, getSemesterText } from '@/utils/format';
+import { formatNumber, formatPercent, getSemesterText, getInstitutionTypeText } from '@/utils/format';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 import type { EnrollmentPlan } from '@/types';
+import { Modal, message, Spin } from 'antd';
 
 const yearOptions = [2024, 2025, 2026];
 const semesterOptions = [
@@ -43,6 +51,7 @@ export default function Enrollment() {
     semesterFilter,
     page,
     pageSize,
+    previewData,
     initPlans,
     fetchPlans,
     setSearchKeyword,
@@ -50,17 +59,25 @@ export default function Enrollment() {
     setSemesterFilter,
     setPage,
     uploadPlan,
+    previewPlan,
+    confirmImport,
+    clearPreview,
     getFilteredPlans,
     getTotalDegreeGap,
     getAvgEnrollmentRate,
     getTotalPlannedCapacity,
     getTotalActualEnrollment,
     getAggregatedForecast,
+    getSummary,
   } = useEnrollmentStore();
+
+  const [viewMode, setViewMode] = useState<'list' | 'summary'>('list');
 
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -102,6 +119,10 @@ export default function Enrollment() {
   const totalFilteredCount = useMemo(() => {
     return getFilteredPlans().length;
   }, [allPlans, searchKeyword, yearFilter, semesterFilter, getFilteredPlans]);
+
+  const summaryData = useMemo(() => {
+    return getSummary();
+  }, [allPlans, searchKeyword, yearFilter, semesterFilter, getSummary]);
 
   const chartOption = useMemo(() => {
     const dates = forecastData.map((d) => d.date.slice(5));
@@ -324,80 +345,46 @@ export default function Enrollment() {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet) as Array<Record<string, any>>;
 
-      const plans: EnrollmentPlan[] = jsonData.map((row, index) => {
-        const institutionName = row['机构名称'] || row['institutionName'] || `机构${index + 1}`;
-        const year = Number(row['年度'] || row['year'] || 2025);
-        const semester = (row['学期'] || row['semester'] || 'spring') as 'spring' | 'autumn';
-        const plannedCapacity = Number(row['计划学位数'] || row['plannedCapacity'] || 0);
-        const actualEnrollment = Math.floor(plannedCapacity * (0.7 + Math.random() * 0.2));
-        const enrollmentRate = parseFloat(((actualEnrollment / plannedCapacity) * 100).toFixed(1)) || 0;
-        const forecast = generateForecast(plannedCapacity);
-
-        const matchedInstitution = mockInstitutions.find(
-          (inst) => inst.name === institutionName
-        );
-
-        let institutionId = `inst_${institutionName}`;
-        let address: EnrollmentPlan['address'] = undefined;
-        let isNewInstitution = false;
-        let uploadedByUserId: string | undefined = undefined;
-        let uploadedByRegion: EnrollmentPlan['uploadedByRegion'] = undefined;
-
-        if (matchedInstitution) {
-          institutionId = matchedInstitution.id;
-          address = {
-            province: matchedInstitution.address.province,
-            city: matchedInstitution.address.city,
-            district: matchedInstitution.address.district,
-          };
-          isNewInstitution = false;
-        } else {
-          isNewInstitution = true;
-          uploadedByUserId = user?.id;
-          uploadedByRegion = user?.region
-            ? {
-                province: user.region.province,
-                city: user.region.city,
-                district: user.region.district,
-              }
-            : undefined;
-          address = {};
-        }
-
-        return {
-          id: `plan_${Date.now()}_${index}`,
-          institutionId,
-          institutionName,
-          year,
-          semester,
-          plannedCapacity,
-          actualEnrollment,
-          enrollmentRate,
-          forecast,
-          address,
-          isNewInstitution,
-          uploadedByUserId,
-          uploadedByRegion,
-        };
-      });
-
-      const result = await uploadPlan(plans);
-      if (result.success) {
-        setUploadStatus('success');
-        setUploadMessage(result.message || '上传成功');
-      } else {
-        setUploadStatus('error');
-        setUploadMessage(result.message || '上传失败');
-      }
+      previewPlan(jsonData);
+      setShowPreview(true);
+      setUploadStatus('idle');
+      setUploadMessage('');
     } catch {
       setUploadStatus('error');
       setUploadMessage('文件解析失败，请检查文件格式');
+      setTimeout(() => {
+        setUploadStatus('idle');
+        setUploadMessage('');
+      }, 3000);
     }
 
-    setTimeout(() => {
-      setUploadStatus('idle');
-      setUploadMessage('');
-    }, 3000);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!previewData) return;
+    
+    setImporting(true);
+    try {
+      const result = await confirmImport();
+      if (result.success) {
+        message.success(result.message || '导入成功');
+        setShowPreview(false);
+      } else {
+        message.error(result.message || '导入失败');
+      }
+    } catch (error) {
+      message.error('导入失败，请重试');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleCancelPreview = () => {
+    setShowPreview(false);
+    clearPreview();
   };
 
   const getStatusStyle = (enrollmentRate: number) => {
@@ -451,6 +438,33 @@ export default function Enrollment() {
           <p className="text-sm text-neutral-500 mt-1">
             管理幼儿园托育招生计划，实时监控学位供需情况
           </p>
+        </div>
+
+        <div className="flex items-center gap-2 p-1 bg-neutral-100 rounded-xl">
+          <button
+            onClick={() => setViewMode('list')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+              viewMode === 'list'
+                ? 'bg-white text-primary-600 shadow-sm'
+                : 'text-neutral-500 hover:text-neutral-700'
+            )}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            列表视图
+          </button>
+          <button
+            onClick={() => setViewMode('summary')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+              viewMode === 'summary'
+                ? 'bg-white text-primary-600 shadow-sm'
+                : 'text-neutral-500 hover:text-neutral-700'
+            )}
+          >
+            <BarChart3 className="w-4 h-4" />
+            汇总视图
+          </button>
         </div>
       </motion.div>
 
@@ -509,7 +523,8 @@ export default function Enrollment() {
         </div>
       </motion.div>
 
-      <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {viewMode === 'list' && (
+        <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-1">
           <div
             className={cn(
@@ -797,7 +812,394 @@ export default function Enrollment() {
             )}
           </div>
         </div>
-      </motion.div>
+        </motion.div>
+      )}
+
+      {viewMode === 'summary' && (
+        <motion.div variants={itemVariants} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="bg-white rounded-2xl shadow-card p-5 border border-neutral-100">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-neutral-500">机构总数</span>
+                <Building2 className="w-5 h-5 text-primary-400" />
+              </div>
+              <div className="text-2xl font-bold text-neutral-800">
+                {formatNumber(summaryData.totalInstitutions)}
+              </div>
+              <div className="text-xs text-neutral-400 mt-1">个机构</div>
+            </div>
+            <div className="bg-white rounded-2xl shadow-card p-5 border border-neutral-100">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-neutral-500">计划学位</span>
+                <GraduationCap className="w-5 h-5 text-primary-400" />
+              </div>
+              <div className="text-2xl font-bold text-primary-600">
+                {formatNumber(summaryData.totalPlannedCapacity)}
+              </div>
+              <div className="text-xs text-neutral-400 mt-1">个学位</div>
+            </div>
+            <div className="bg-white rounded-2xl shadow-card p-5 border border-neutral-100">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-neutral-500">实际入托</span>
+                <Users className="w-5 h-5 text-health-400" />
+              </div>
+              <div className="text-2xl font-bold text-health-600">
+                {formatNumber(summaryData.totalActualEnrollment)}
+              </div>
+              <div className="text-xs text-neutral-400 mt-1">人</div>
+            </div>
+            <div className="bg-white rounded-2xl shadow-card p-5 border border-neutral-100">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-neutral-500">平均入托率</span>
+                <TrendingUp className="w-5 h-5 text-warning-400" />
+              </div>
+              <div className="text-2xl font-bold text-warning-600">
+                {formatPercent(summaryData.avgEnrollmentRate)}
+              </div>
+              <div className="text-xs text-neutral-400 mt-1">%占比</div>
+            </div>
+            <div className="bg-white rounded-2xl shadow-card p-5 border border-neutral-100">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-neutral-500">90天缺口</span>
+                <AlertTriangle className="w-5 h-5 text-danger-400" />
+              </div>
+              <div className="text-2xl font-bold text-danger-600">
+                {formatNumber(summaryData.totalGap90Days)}
+              </div>
+              <div className="text-xs text-neutral-400 mt-1">个学位</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-2xl shadow-card p-6 border border-neutral-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center">
+                  <MapPin className="w-5 h-5 text-primary-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-neutral-800">
+                    {user?.role === 'national' ? '按省份汇总' :
+                     user?.role === 'provincial' ? '按城市汇总' : '按区县汇总'}
+                  </h3>
+                  <p className="text-xs text-neutral-500">各区域招生计划统计</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {summaryData.byRegion.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <p className="text-sm text-neutral-400">暂无汇总数据</p>
+                  </div>
+                ) : (
+                  summaryData.byRegion.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center">
+                            <span className="text-sm font-bold text-primary-600">{idx + 1}</span>
+                          </div>
+                          <span className="font-medium text-neutral-800">{item.region}</span>
+                          <span className="text-xs text-neutral-400">({item.institutionCount}个机构)</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <p className="text-xs text-neutral-500 mb-1">计划学位</p>
+                          <p className="text-sm font-semibold text-primary-600">{formatNumber(item.plannedCapacity)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-neutral-500 mb-1">实际入托</p>
+                          <p className="text-sm font-semibold text-health-600">{formatNumber(item.actualEnrollment)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-neutral-500 mb-1">90天缺口</p>
+                          <p className="text-sm font-semibold text-danger-600">{formatNumber(item.gap90Days)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
+                          <span>入托率</span>
+                          <span className="font-medium text-neutral-700">{formatPercent(item.enrollmentRate)}</span>
+                        </div>
+                        <div className="h-2 bg-neutral-200 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              'h-full rounded-full transition-all',
+                              item.enrollmentRate >= 85 ? 'bg-health-500' :
+                              item.enrollmentRate >= 70 ? 'bg-warning-500' : 'bg-danger-500'
+                            )}
+                            style={{ width: `${item.enrollmentRate}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-card p-6 border border-neutral-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-warning-50 flex items-center justify-center">
+                  <Building2 className="w-5 h-5 text-warning-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-neutral-800">按机构类型汇总</h3>
+                  <p className="text-xs text-neutral-500">不同类型机构招生统计</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {summaryData.byType.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <p className="text-sm text-neutral-400">暂无汇总数据</p>
+                  </div>
+                ) : (
+                  summaryData.byType.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-warning-100 flex items-center justify-center">
+                            <span className="text-sm font-bold text-warning-600">{idx + 1}</span>
+                          </div>
+                          <span className="font-medium text-neutral-800">
+                            {getInstitutionTypeText(item.type)}
+                          </span>
+                          <span className="text-xs text-neutral-400">({item.institutionCount}个机构)</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <p className="text-xs text-neutral-500 mb-1">计划学位</p>
+                          <p className="text-sm font-semibold text-primary-600">{formatNumber(item.plannedCapacity)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-neutral-500 mb-1">实际入托</p>
+                          <p className="text-sm font-semibold text-health-600">{formatNumber(item.actualEnrollment)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-neutral-500 mb-1">90天缺口</p>
+                          <p className="text-sm font-semibold text-danger-600">{formatNumber(item.gap90Days)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
+                          <span>入托率</span>
+                          <span className="font-medium text-neutral-700">{formatPercent(item.enrollmentRate)}</span>
+                        </div>
+                        <div className="h-2 bg-neutral-200 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              'h-full rounded-full transition-all',
+                              item.enrollmentRate >= 85 ? 'bg-health-500' :
+                              item.enrollmentRate >= 70 ? 'bg-warning-500' : 'bg-danger-500'
+                            )}
+                            style={{ width: `${item.enrollmentRate}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      <Modal
+        title="导入预览"
+        open={showPreview}
+        onCancel={handleCancelPreview}
+        footer={null}
+        width={900}
+        destroyOnClose
+      >
+        {previewData && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 p-4 bg-neutral-50 rounded-xl">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-health-500" />
+                <span className="text-sm text-neutral-700">
+                  正常数据：<span className="font-semibold text-health-600">{previewData.validCount}</span> 条
+                </span>
+              </div>
+              {previewData.invalidCount > 0 && (
+                <div className="flex items-center gap-2">
+                  <XCircle className="w-5 h-5 text-danger-500" />
+                  <span className="text-sm text-neutral-700">
+                    异常数据：<span className="font-semibold text-danger-600">{previewData.invalidCount}</span> 条
+                  </span>
+                </div>
+              )}
+              {previewData.warningCount > 0 && (
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-warning-500" />
+                  <span className="text-sm text-neutral-700">
+                    警告提示：<span className="font-semibold text-warning-600">{previewData.warningCount}</span> 条
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="border border-neutral-200 rounded-xl overflow-hidden">
+              <div className="max-h-[400px] overflow-y-auto">
+                <table className="w-full">
+                  <thead className="bg-neutral-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                        序号
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                        机构名称
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                        年度
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                        计划学位
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                        匹配机构
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                        状态
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {previewData.items.map((item) => (
+                      <tr
+                        key={item.index}
+                        className={cn(
+                          'hover:bg-neutral-50 transition-colors',
+                          item.errors.length > 0 ? 'bg-danger-50/30' : ''
+                        )}
+                      >
+                        <td className="px-4 py-3 text-sm text-neutral-500">
+                          {item.index}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm font-medium text-neutral-800">
+                            {item.institutionName || <span className="text-danger-500">（空）</span>}
+                          </div>
+                          {item.errors.length > 0 && (
+                            <div className="mt-1 space-y-1">
+                              {item.errors.map((err, idx) => (
+                                <div key={idx} className="flex items-center gap-1 text-xs text-danger-600">
+                                  <AlertCircle className="w-3 h-3" />
+                                  {err}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {item.warnings.length > 0 && (
+                            <div className="mt-1 space-y-1">
+                              {item.warnings.map((warn, idx) => (
+                                <div key={idx} className="flex items-center gap-1 text-xs text-warning-600">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  {warn}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-neutral-700">
+                          {item.year || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-neutral-700">
+                          {item.plannedCapacity !== null ? item.plannedCapacity : <span className="text-danger-500">-</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.matchedInstitution ? (
+                            <div>
+                              <div className="text-sm font-medium text-neutral-800">
+                                {item.matchedInstitution.name}
+                              </div>
+                              <div className="text-xs text-neutral-500">
+                                {getInstitutionTypeText(item.matchedInstitution.type)}
+                              </div>
+                            </div>
+                          ) : item.isNewInstitution ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-warning-50 text-warning-700 text-xs font-medium rounded-full">
+                              <Info className="w-3 h-3" />
+                              新机构
+                            </span>
+                          ) : (
+                            <span className="text-neutral-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.errors.length > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-danger-50 text-danger-700 text-xs font-medium rounded-full">
+                              <XCircle className="w-3 h-3" />
+                              异常
+                            </span>
+                          ) : item.warnings.length > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-warning-50 text-warning-700 text-xs font-medium rounded-full">
+                              <AlertTriangle className="w-3 h-3" />
+                              警告
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-health-50 text-health-700 text-xs font-medium rounded-full">
+                              <CheckCircle2 className="w-3 h-3" />
+                              正常
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-sm text-neutral-500">
+                {previewData.hasErrors
+                  ? '异常数据将被跳过，仅导入正常数据'
+                  : '所有数据均可正常导入'}
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleCancelPreview}
+                  className="px-5 py-2.5 text-sm font-medium text-neutral-600 bg-neutral-100 rounded-xl hover:bg-neutral-200 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleConfirmImport}
+                  disabled={importing || previewData.validCount === 0}
+                  className={cn(
+                    'flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white rounded-xl transition-all',
+                    importing || previewData.validCount === 0
+                      ? 'bg-neutral-300 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 shadow-sm hover:shadow-md'
+                  )}
+                >
+                  {importing ? (
+                    <>
+                      <Spin size="small" />
+                      导入中...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      确认导入（{previewData.validCount}条）
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </motion.div>
   );
 }

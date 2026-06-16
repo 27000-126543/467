@@ -76,6 +76,16 @@ export function getAlertStatusColor(status: string): string {
   return map[status] || 'neutral';
 }
 
+export function getInstitutionTypeText(type: string): string {
+  const map: Record<string, string> = {
+    kindergarten: '幼儿园',
+    nursery: '托儿所',
+    preschool: '学前班',
+    daycare: '托育中心',
+  };
+  return map[type] || type;
+}
+
 export function getInstitutionLevelText(level: string): string {
   const map: Record<string, string> = {
     demo: '示范园',
@@ -131,6 +141,7 @@ export function getApprovalTypeText(type: string): string {
   const map: Record<string, string> = {
     class_adjustment: '班额调整',
     enrollment_suspension: '限停招收',
+    alert_escalation: '预警升级',
   };
   return map[type] || type;
 }

@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Approval, ApprovalStatus, ApprovalType } from '@/types';
+import type { Approval, ApprovalStatus, ApprovalType, Alert } from '@/types';
 import { mockApprovals, mockInstitutions } from '@/mock/data';
 import { useAuthStore } from '@/store/auth';
+import { useAlertsStore } from '@/store/alerts';
 
 type TabType = 'pending' | 'approved' | 'all';
 
@@ -36,6 +37,8 @@ interface ApprovalsState {
   approveApproval: (id: string, comment: string, handlerName?: string) => Promise<boolean>;
   
   rejectApproval: (id: string, comment: string, handlerName?: string) => Promise<boolean>;
+  
+  createEscalationApproval: (alert: Alert, escalationReason: string, handlerName?: string) => Promise<Approval | null>;
   
   setActiveTab: (tab: TabType) => void;
   
@@ -173,6 +176,7 @@ export const useApprovalsStore = create<ApprovalsState>()(
 
         get().initApprovals();
         const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const operator = handlerName || '系统管理员';
 
         set((state) => {
           const newApprovals = state.allApprovals.map((a) => {
@@ -181,13 +185,24 @@ export const useApprovalsStore = create<ApprovalsState>()(
             const newStages = [...a.stages];
             const currentStageIdx = a.currentStage - 1;
 
+            const historyRecord = {
+              stage: a.currentStage,
+              role: newStages[currentStageIdx]?.role || '',
+              status: 'approved' as const,
+              comment,
+              handledAt: now,
+              handlerName: operator,
+            };
+
+            const newProcessHistory = [...(a.processHistory || []), historyRecord];
+
             if (currentStageIdx < newStages.length) {
               newStages[currentStageIdx] = {
                 ...newStages[currentStageIdx],
                 status: 'approved',
                 comment,
                 handledAt: now,
-                handlerName: handlerName || '系统管理员',
+                handlerName: operator,
               };
             }
 
@@ -211,10 +226,24 @@ export const useApprovalsStore = create<ApprovalsState>()(
               status: newStatus,
               currentStage: newCurrentStage,
               stages: newStages,
+              processHistory: newProcessHistory,
             };
           });
 
           const updated = newApprovals.find((a) => a.id === id) || null;
+
+          if (updated && updated.alertId) {
+            const alertUpdate: Partial<Alert> = {
+              approvalStatus: updated.status,
+              approvalResult: comment,
+              approvalProcessedAt: now,
+            };
+            if (updated.status === 'approved') {
+              alertUpdate.status = 'processing';
+              alertUpdate.resolution = `升级审批已通过，${comment}`;
+            }
+            useAlertsStore.getState().updateAlert(updated.alertId, alertUpdate);
+          }
 
           return {
             allApprovals: newApprovals,
@@ -231,6 +260,7 @@ export const useApprovalsStore = create<ApprovalsState>()(
 
         get().initApprovals();
         const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const operator = handlerName || '系统管理员';
 
         set((state) => {
           const newApprovals = state.allApprovals.map((a) => {
@@ -239,13 +269,24 @@ export const useApprovalsStore = create<ApprovalsState>()(
             const newStages = [...a.stages];
             const currentStageIdx = a.currentStage - 1;
 
+            const historyRecord = {
+              stage: a.currentStage,
+              role: newStages[currentStageIdx]?.role || '',
+              status: 'rejected' as const,
+              comment,
+              handledAt: now,
+              handlerName: operator,
+            };
+
+            const newProcessHistory = [...(a.processHistory || []), historyRecord];
+
             if (currentStageIdx < newStages.length) {
               newStages[currentStageIdx] = {
                 ...newStages[currentStageIdx],
                 status: 'rejected' as const,
                 comment,
                 handledAt: now,
-                handlerName: handlerName || '系统管理员',
+                handlerName: operator,
               };
             }
 
@@ -255,10 +296,19 @@ export const useApprovalsStore = create<ApprovalsState>()(
               ...a,
               status: newStatus,
               stages: newStages,
+              processHistory: newProcessHistory,
             };
           });
 
           const updated = newApprovals.find((a) => a.id === id) || null;
+
+          if (updated && updated.alertId) {
+            useAlertsStore.getState().updateAlert(updated.alertId, {
+              approvalStatus: 'rejected',
+              approvalResult: comment,
+              approvalProcessedAt: now,
+            });
+          }
 
           return {
             allApprovals: newApprovals,
@@ -268,6 +318,59 @@ export const useApprovalsStore = create<ApprovalsState>()(
         });
 
         return true;
+      },
+
+      createEscalationApproval: async (alert, escalationReason, handlerName) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+
+        get().initApprovals();
+        const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+        const newApproval: Approval = {
+          id: `app_escalate_${Date.now()}`,
+          alertId: alert.id,
+          institutionId: alert.institutionId,
+          institutionName: alert.institutionName,
+          type: 'alert_escalation',
+          status: 'pending_principal',
+          currentStage: 1,
+          stages: [
+            {
+              stage: 1,
+              role: '园长确认',
+              status: 'pending',
+            },
+            {
+              stage: 2,
+              role: '区卫健复核',
+              status: 'pending',
+            },
+            {
+              stage: 3,
+              role: '市卫健委批准',
+              status: 'pending',
+            },
+          ],
+          createdAt: now,
+          proposedAction: '预警升级审批',
+          escalationReason,
+          alertSnapshot: {
+            id: alert.id,
+            type: alert.type,
+            level: alert.level,
+            description: alert.description,
+            threshold: alert.threshold,
+            actualValue: alert.actualValue,
+            triggeredAt: alert.triggeredAt,
+          },
+          processHistory: [],
+        };
+
+        set((state) => ({
+          allApprovals: [newApproval, ...state.allApprovals],
+        }));
+
+        return newApproval;
       },
 
       setActiveTab: (tab) => {

@@ -17,10 +17,11 @@ export interface User {
 
 export type InstitutionLevel = 'demo' | 'first' | 'second' | 'third';
 export type InstitutionStatus = 'normal' | 'warning' | 'restricted' | 'closed';
-
+export type InstitutionType = 'kindergarten' | 'nursery' | 'preschool' | 'daycare';
 export interface Institution {
   id: string;
   name: string;
+  type: InstitutionType;
   level: InstitutionLevel;
   address: {
     province: string;
@@ -130,9 +131,14 @@ export interface Alert {
   resolvedAt?: string;
   resolution?: string;
   description: string;
+  escalationReason?: string;
+  approvalId?: string;
+  approvalStatus?: ApprovalStatus;
+  approvalResult?: string;
+  approvalProcessedAt?: string;
 }
 
-export type ApprovalType = 'class_adjustment' | 'enrollment_suspension';
+export type ApprovalType = 'class_adjustment' | 'enrollment_suspension' | 'alert_escalation';
 export type ApprovalStatus = 
   | 'pending_principal' 
   | 'pending_district' 
@@ -152,7 +158,7 @@ export interface ApprovalStage {
 
 export interface Approval {
   id: string;
-  alertId: string;
+  alertId?: string;
   institutionId: string;
   institutionName: string;
   type: ApprovalType;
@@ -162,6 +168,17 @@ export interface Approval {
   createdAt: string;
   proposedAction: string;
   expectedEffect?: string;
+  escalationReason?: string;
+  alertSnapshot?: {
+    id: string;
+    type: AlertType;
+    level: AlertLevel;
+    description: string;
+    threshold: number;
+    actualValue: number;
+    triggeredAt: string;
+  };
+  processHistory?: ApprovalStage[];
 }
 
 export type SemesterType = 'spring' | 'autumn';
@@ -195,6 +212,8 @@ export interface EnrollmentPlan {
     district?: string;
   };
   isNewInstitution?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type ReportPeriod = 'week' | 'month';
@@ -272,6 +291,51 @@ export interface PaginatedResponse<T> {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export interface EnrollmentPlanPreviewItem {
+  index: number;
+  institutionName: string;
+  year: number;
+  plannedCapacity: number | null;
+  matchedInstitution: {
+    id: string;
+    name: string;
+    type: InstitutionType;
+  } | null;
+  isNewInstitution: boolean;
+  errors: string[];
+  warnings: string[];
+  rawData: Record<string, any>;
+}
+
+export interface EnrollmentPlanPreview {
+  items: EnrollmentPlanPreviewItem[];
+  validCount: number;
+  invalidCount: number;
+  warningCount: number;
+  hasErrors: boolean;
+}
+
+export interface EnrollmentSummaryItem {
+  region: string;
+  regionCode?: string;
+  type: InstitutionType;
+  institutionCount: number;
+  plannedCapacity: number;
+  actualEnrollment: number;
+  enrollmentRate: number;
+  gap90Days: number;
+}
+
+export interface EnrollmentSummary {
+  totalInstitutions: number;
+  totalPlannedCapacity: number;
+  totalActualEnrollment: number;
+  avgEnrollmentRate: number;
+  totalGap90Days: number;
+  byRegion: EnrollmentSummaryItem[];
+  byType: EnrollmentSummaryItem[];
 }
 
 export interface AlertConfig {

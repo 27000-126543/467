@@ -18,6 +18,8 @@ import {
   MapPin,
   Phone,
   UserCheck,
+  FileCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAlertsStore } from '@/store/alerts';
@@ -110,10 +112,42 @@ export default function AlertDetail() {
           id: 2,
           status: 'escalated',
           title: '预警已升级',
-          description: selectedAlert.resolution || '由于情况严重，已升级至上级部门处理',
+          description: selectedAlert.escalationReason || '由于情况严重，已升级至上级部门处理',
           time: selectedAlert.processedAt || selectedAlert.triggeredAt,
           operator: selectedAlert.handlerName || '系统',
         });
+
+        if (selectedAlert.approvalStatus) {
+          const approvalTime = selectedAlert.approvalProcessedAt || selectedAlert.processedAt;
+          if (selectedAlert.approvalStatus === 'approved') {
+            records.push({
+              id: 3,
+              status: 'processing',
+              title: '升级审批通过',
+              description: selectedAlert.approvalResult || '升级审批已通过，正在按审批意见处理',
+              time: approvalTime as string,
+              operator: '审批系统',
+            });
+          } else if (selectedAlert.approvalStatus === 'rejected') {
+            records.push({
+              id: 3,
+              status: 'escalated',
+              title: '升级审批驳回',
+              description: selectedAlert.approvalResult || '升级申请被驳回',
+              time: approvalTime as string,
+              operator: '审批系统',
+            });
+          } else {
+            records.push({
+              id: 3,
+              status: 'processing',
+              title: '审批中',
+              description: '升级审批正在处理中，请等待审批结果',
+              time: selectedAlert.processedAt || selectedAlert.triggeredAt,
+              operator: '审批系统',
+            });
+          }
+        }
       }
     }
 
@@ -286,9 +320,9 @@ export default function AlertDetail() {
   };
 
   const handleEscalate = async () => {
-    if (!selectedAlert) return;
+    if (!selectedAlert || !escalateReason.trim()) return;
     setProcessing(true);
-    const success = await escalateAlert(selectedAlert.id);
+    const success = await escalateAlert(selectedAlert.id, escalateReason);
     setProcessing(false);
     if (success) {
       setShowEscalateModal(false);
@@ -441,9 +475,14 @@ export default function AlertDetail() {
                 {getAlertStatusText(selectedAlert.status)}
               </span>
             </div>
-            <h1 className="text-2xl font-bold text-neutral-800 mb-2">
-              {selectedAlert.institutionName}
-            </h1>
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="text-2xl font-bold text-neutral-800">
+                {selectedAlert.institutionName}
+              </h1>
+              <span className="px-2.5 py-1 bg-neutral-100 text-neutral-600 text-sm font-mono rounded-lg">
+                编号：{selectedAlert.id}
+              </span>
+            </div>
             <p className="text-neutral-600 mb-4">{selectedAlert.description}</p>
             <div className="flex flex-wrap gap-6 text-sm text-neutral-500">
               <div className="flex items-center gap-2">
@@ -630,6 +669,62 @@ export default function AlertDetail() {
               <p className="text-sm text-neutral-500 text-center py-8">暂无机构信息</p>
             )}
           </div>
+
+          {selectedAlert.approvalId && (
+            <div className="bg-white rounded-2xl shadow-card p-6 border border-neutral-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center">
+                  <FileCheck className="w-5 h-5 text-primary-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-neutral-800">关联审批</h3>
+                  <p className="text-xs text-neutral-500">预警升级审批记录</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-neutral-500">审批编号</span>
+                  <span className="text-sm font-mono text-neutral-700">{selectedAlert.approvalId}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-neutral-500">审批状态</span>
+                  <span className={cn(
+                    'px-2 py-0.5 text-xs font-medium rounded-full',
+                    selectedAlert.approvalStatus === 'approved' ? 'bg-health-50 text-health-600' :
+                    selectedAlert.approvalStatus === 'rejected' ? 'bg-danger-50 text-danger-600' :
+                    'bg-warning-50 text-warning-600'
+                  )}>
+                    {selectedAlert.approvalStatus === 'approved' ? '已通过' :
+                     selectedAlert.approvalStatus === 'rejected' ? '已驳回' :
+                     selectedAlert.approvalStatus === 'pending_principal' ? '待园长确认' :
+                     selectedAlert.approvalStatus === 'pending_district' ? '待区卫健复核' :
+                     selectedAlert.approvalStatus === 'pending_city' ? '待市卫健委批准' : '处理中'}
+                  </span>
+                </div>
+                {selectedAlert.approvalResult && (
+                  <div>
+                    <span className="text-sm text-neutral-500">审批结果</span>
+                    <p className="text-sm text-neutral-700 mt-1">{selectedAlert.approvalResult}</p>
+                  </div>
+                )}
+                {selectedAlert.approvalProcessedAt && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-neutral-500">处理时间</span>
+                    <span className="text-sm text-neutral-600">{formatDateTime(selectedAlert.approvalProcessedAt)}</span>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => navigate(`/approvals/${selectedAlert.approvalId}`)}
+                className="w-full mt-4 px-4 py-2 bg-primary-50 text-primary-600 rounded-xl text-sm font-medium hover:bg-primary-100 transition-colors flex items-center justify-center gap-2"
+              >
+                查看审批详情
+                <ExternalLink className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {(selectedAlert.status === 'pending' || selectedAlert.status === 'processing') && (
             <div className="bg-white rounded-2xl shadow-card p-6 border border-neutral-100">

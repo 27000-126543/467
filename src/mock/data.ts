@@ -72,6 +72,13 @@ const institutionLevels: Array<{ label: string; value: Institution['level'] }> =
   { label: '三级园', value: 'third' },
 ];
 
+const institutionTypes: Array<{ label: string; value: Institution['type'] }> = [
+  { label: '幼儿园', value: 'kindergarten' },
+  { label: '托儿所', value: 'nursery' },
+  { label: '学前班', value: 'preschool' },
+  { label: '托育中心', value: 'daycare' },
+];
+
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -123,9 +130,11 @@ export function generateInstitutions(count = 50): Institution[] {
         const studentCount = Math.floor(capacity * randomFloat(0.7, 0.95));
         const teacherCount = Math.floor(studentCount / randomFloat(5, 8));
 
+        const type = randomItem(institutionTypes);
         institutions.push({
           id: generateId('inst', index),
-          name: `${city}${['阳光', '星星', '智慧树', '小天使', '快乐童年', '金宝贝', '爱婴', '新苗'][randomInt(0, 7)]}幼儿园`,
+          name: `${city}${['阳光', '星星', '智慧树', '小天使', '快乐童年', '金宝贝', '爱婴', '新苗'][randomInt(0, 7)]}${type.label}`,
+          type: type.value,
           level: level.value,
           address: {
             province: prov.name,

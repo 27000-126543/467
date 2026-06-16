@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Building2,
   ArrowRight,
+  MessageSquare,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Pagination, Spin, Empty } from 'antd';
@@ -31,6 +32,7 @@ const typeOptions = [
   { label: '全部类型', value: 'all' },
   { label: '班额调整', value: 'class_adjustment' },
   { label: '限停招收', value: 'enrollment_suspension' },
+  { label: '预警升级', value: 'alert_escalation' },
 ];
 
 const statusOptions = [
@@ -421,6 +423,43 @@ export default function Approvals() {
                       </div>
                     </div>
                   </div>
+
+                  {(approval.processHistory && approval.processHistory.length > 0) && (
+                    <div className="mt-4 pt-4 border-t border-neutral-100">
+                      <div className="flex items-start gap-2 p-3 bg-neutral-50 rounded-lg">
+                        <MessageSquare className="w-4 h-4 text-neutral-400 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-medium text-neutral-700">
+                              {approval.processHistory[approval.processHistory.length - 1].role}
+                              <span className={cn(
+                                'ml-1.5 px-1.5 py-0.5 text-xs font-medium rounded',
+                                approval.processHistory[approval.processHistory.length - 1].status === 'approved'
+                                  ? 'bg-health-50 text-health-600'
+                                  : approval.processHistory[approval.processHistory.length - 1].status === 'rejected'
+                                  ? 'bg-danger-50 text-danger-600'
+                                  : 'bg-neutral-100 text-neutral-600'
+                              )}>
+                                {approval.processHistory[approval.processHistory.length - 1].status === 'approved'
+                                  ? '通过'
+                                  : approval.processHistory[approval.processHistory.length - 1].status === 'rejected'
+                                  ? '驳回'
+                                  : '处理中'}
+                              </span>
+                            </span>
+                            <span className="text-xs text-neutral-400">
+                              {approval.processHistory[approval.processHistory.length - 1].handlerName} · {approval.processHistory[approval.processHistory.length - 1].handledAt}
+                            </span>
+                          </div>
+                          {approval.processHistory[approval.processHistory.length - 1].comment && (
+                            <p className="text-sm text-neutral-600 line-clamp-1">
+                              {approval.processHistory[approval.processHistory.length - 1].comment}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-4 pt-4 border-t border-neutral-100">
                     <div className="flex items-center gap-4">

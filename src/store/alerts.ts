@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { Alert, AlertStatus, AlertLevel, AlertType } from '@/types';
 import { mockAlerts, mockInstitutions } from '@/mock/data';
 import { useAuthStore } from '@/store/auth';
+import { useApprovalsStore } from '@/store/approvals';
 
 interface AlertsState {
   allAlerts: Alert[];
@@ -30,7 +31,9 @@ interface AlertsState {
   
   processAlert: (id: string, status: AlertStatus, resolution: string, handlerName?: string) => Promise<boolean>;
   
-  escalateAlert: (id: string) => Promise<boolean>;
+  escalateAlert: (id: string, escalationReason: string, handlerName?: string) => Promise<boolean>;
+  
+  updateAlert: (id: string, updates: Partial<Alert>) => void;
   
   setFilters: (filters: Partial<{
     status: AlertStatus | 'all';
@@ -189,10 +192,22 @@ export const useAlertsStore = create<AlertsState>()(
         return true;
       },
 
-      escalateAlert: async (id) => {
+      escalateAlert: async (id, escalationReason, handlerName) => {
         await new Promise((resolve) => setTimeout(resolve, 400));
 
         get().initAlerts();
+        const alert = get().allAlerts.find((a) => a.id === id);
+        if (!alert) return false;
+
+        const approval = await useApprovalsStore.getState().createEscalationApproval(
+          alert,
+          escalationReason,
+          handlerName
+        );
+
+        if (!approval) return false;
+
+        const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
         set((state) => {
           const newAlerts = state.allAlerts.map((a) =>
@@ -201,6 +216,11 @@ export const useAlertsStore = create<AlertsState>()(
                   ...a,
                   level: (Math.min(a.level + 1, 3) as 1 | 2 | 3),
                   status: 'escalated' as const,
+                  escalationReason,
+                  approvalId: approval.id,
+                  approvalStatus: 'pending_principal' as const,
+                  processedAt: now,
+                  handlerName: handlerName || '系统管理员',
                 }
               : a
           );
@@ -214,6 +234,20 @@ export const useAlertsStore = create<AlertsState>()(
         });
 
         return true;
+      },
+
+      updateAlert: (id, updates) => {
+        get().initAlerts();
+        set((state) => {
+          const newAlerts = state.allAlerts.map((a) =>
+            a.id === id ? { ...a, ...updates } : a
+          );
+          const updated = newAlerts.find((a) => a.id === id) || null;
+          return {
+            allAlerts: newAlerts,
+            selectedAlert: state.selectedAlert?.id === id ? updated : state.selectedAlert,
+          };
+        });
       },
 
       setFilters: (filters) => {

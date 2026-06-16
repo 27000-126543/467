@@ -77,6 +77,15 @@ export default function ApprovalDetail() {
 
   const relatedAlert = useMemo(() => {
     if (!selectedApproval) return null;
+    if (selectedApproval.alertSnapshot) {
+      return {
+        ...selectedApproval.alertSnapshot,
+        institutionId: selectedApproval.institutionId,
+        institutionName: selectedApproval.institutionName,
+        consecutiveDays: 0,
+        status: 'pending' as const,
+      };
+    }
     return mockAlerts.find((a) => a.id === selectedApproval.alertId) || null;
   }, [selectedApproval]);
 
@@ -217,6 +226,9 @@ export default function ApprovalDetail() {
               <h1 className="text-xl font-bold text-neutral-800">
                 {selectedApproval.institutionName}
               </h1>
+              <span className="px-2.5 py-1 bg-neutral-100 text-neutral-600 text-sm font-mono rounded-lg">
+                编号：{selectedApproval.id}
+              </span>
               <span
                 className={cn(
                   'px-3 py-1 text-xs font-medium rounded-full border',
@@ -235,8 +247,6 @@ export default function ApprovalDetail() {
               </span>
             </div>
             <p className="text-sm text-neutral-500">
-              审批编号：{selectedApproval.id}
-              <span className="mx-3">|</span>
               创建时间：{formatDateTime(selectedApproval.createdAt)}
             </p>
           </div>
@@ -388,6 +398,15 @@ export default function ApprovalDetail() {
                   </p>
                 </div>
               )}
+
+              {selectedApproval.escalationReason && (
+                <div className="p-4 bg-warning-50/50 rounded-xl border border-warning-100">
+                  <h3 className="text-sm font-semibold text-warning-700 mb-2">升级原因</h3>
+                  <p className="text-sm text-neutral-700 leading-relaxed">
+                    {selectedApproval.escalationReason}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -524,6 +543,70 @@ export default function ApprovalDetail() {
                 >
                   查看机构详情
                 </button>
+              </div>
+            </div>
+          )}
+
+          {(selectedApproval.processHistory && selectedApproval.processHistory.length > 0) && (
+            <div className="bg-white rounded-2xl shadow-card border border-neutral-100 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-primary-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-neutral-800">处理历史记录</h2>
+                  <p className="text-xs text-neutral-500">各节点操作轨迹</p>
+                </div>
+              </div>
+
+              <div className="relative">
+                <div className="absolute left-[18px] top-0 bottom-0 w-0.5 bg-neutral-200" />
+                <div className="space-y-4">
+                  {[...selectedApproval.processHistory].reverse().map((record, idx) => (
+                    <div key={idx} className="relative flex gap-3">
+                      <div className={cn(
+                        'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 relative z-10',
+                        record.status === 'approved' ? 'bg-health-100' :
+                        record.status === 'rejected' ? 'bg-danger-100' : 'bg-neutral-100'
+                      )}>
+                        {record.status === 'approved' ? (
+                          <CheckCircle2 className="w-4 h-4 text-health-500" />
+                        ) : record.status === 'rejected' ? (
+                          <XCircle className="w-4 h-4 text-danger-500" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-neutral-400" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-neutral-800">
+                            {record.role}
+                            <span className={cn(
+                              'ml-2 px-1.5 py-0.5 text-xs font-medium rounded',
+                              record.status === 'approved' ? 'bg-health-50 text-health-600' :
+                              record.status === 'rejected' ? 'bg-danger-50 text-danger-600' :
+                              'bg-neutral-50 text-neutral-600'
+                            )}>
+                              {record.status === 'approved' ? '通过' :
+                               record.status === 'rejected' ? '驳回' : '处理中'}
+                            </span>
+                          </span>
+                        </div>
+                        <div className="text-xs text-neutral-500 mb-1">
+                          {record.handlerName} · {record.handledAt}
+                        </div>
+                        {record.comment && (
+                          <div className="p-2 bg-neutral-50 rounded-lg text-sm text-neutral-600">
+                            <div className="flex items-start gap-1">
+                              <MessageSquare className="w-3 h-3 text-neutral-400 mt-0.5 flex-shrink-0" />
+                              <span>{record.comment}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
