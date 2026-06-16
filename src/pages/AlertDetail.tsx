@@ -77,36 +77,44 @@ export default function AlertDetail() {
     ];
 
     if (selectedAlert.handlerName && selectedAlert.status !== 'pending') {
-      records.push({
-        id: 2,
-        status: 'processing',
-        title: '开始处理',
-        description: `${selectedAlert.handlerName} 已接手处理此预警`,
-        time: selectedAlert.triggeredAt,
-        operator: selectedAlert.handlerName,
-      });
-    }
-
-    if (selectedAlert.status === 'resolved' && selectedAlert.resolvedAt) {
-      records.push({
-        id: 3,
-        status: 'resolved',
-        title: '预警已解决',
-        description: selectedAlert.resolution || '已采取相应措施并整改到位',
-        time: selectedAlert.resolvedAt,
-        operator: selectedAlert.handlerName || '系统',
-      });
-    }
-
-    if (selectedAlert.status === 'escalated') {
-      records.push({
-        id: 2,
-        status: 'escalated',
-        title: '预警已升级',
-        description: '由于情况严重，已升级至上级部门处理',
-        time: selectedAlert.triggeredAt,
-        operator: selectedAlert.handlerName || '系统',
-      });
+      if (selectedAlert.status === 'processing') {
+        records.push({
+          id: 2,
+          status: 'processing',
+          title: '处理中',
+          description: selectedAlert.resolution || `${selectedAlert.handlerName} 已接手处理此预警`,
+          time: selectedAlert.processedAt || selectedAlert.triggeredAt,
+          operator: selectedAlert.handlerName,
+        });
+      } else if (selectedAlert.status === 'resolved') {
+        if (selectedAlert.processedAt) {
+          records.push({
+            id: 2,
+            status: 'processing',
+            title: '开始处理',
+            description: selectedAlert.resolution || `${selectedAlert.handlerName} 已接手处理此预警`,
+            time: selectedAlert.processedAt,
+            operator: selectedAlert.handlerName,
+          });
+        }
+        records.push({
+          id: 3,
+          status: 'resolved',
+          title: '预警已解决',
+          description: selectedAlert.resolution || '已采取相应措施并整改到位',
+          time: selectedAlert.resolvedAt as string,
+          operator: selectedAlert.handlerName || '系统',
+        });
+      } else if (selectedAlert.status === 'escalated') {
+        records.push({
+          id: 2,
+          status: 'escalated',
+          title: '预警已升级',
+          description: selectedAlert.resolution || '由于情况严重，已升级至上级部门处理',
+          time: selectedAlert.processedAt || selectedAlert.triggeredAt,
+          operator: selectedAlert.handlerName || '系统',
+        });
+      }
     }
 
     return records;

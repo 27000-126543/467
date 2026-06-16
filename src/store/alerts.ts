@@ -152,17 +152,31 @@ export const useAlertsStore = create<AlertsState>()(
         const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
         set((state) => {
-          const newAlerts = state.allAlerts.map((a) =>
-            a.id === id
-              ? {
-                  ...a,
-                  status,
-                  resolution,
-                  resolvedAt: now,
-                  handlerName: handlerName || '系统管理员',
-                }
-              : a
-          );
+          const newAlerts = state.allAlerts.map((a) => {
+            if (a.id !== id) return a;
+            
+            const baseUpdate = {
+              ...a,
+              status,
+              resolution,
+              handlerName: handlerName || '系统管理员',
+            };
+            
+            if (status === 'processing') {
+              return {
+                ...baseUpdate,
+                processedAt: now,
+              };
+            } else if (status === 'resolved') {
+              return {
+                ...baseUpdate,
+                resolvedAt: now,
+                processedAt: a.processedAt || now,
+              };
+            }
+            
+            return baseUpdate;
+          });
 
           const updated = newAlerts.find((a) => a.id === id) || null;
 
@@ -273,7 +287,22 @@ export const useAlertsStore = create<AlertsState>()(
     }),
     {
       name: 'alerts-storage',
-      partialize: (state) => ({ allAlerts: state.allAlerts }),
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (version < 2) {
+          return null;
+        }
+        return persistedState;
+      },
+      partialize: (state) => ({
+        allAlerts: state.allAlerts,
+        page: state.page,
+        pageSize: state.pageSize,
+        statusFilter: state.statusFilter,
+        levelFilter: state.levelFilter,
+        typeFilter: state.typeFilter,
+        searchKeyword: state.searchKeyword,
+      }),
     }
   )
 );

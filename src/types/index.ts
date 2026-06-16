@@ -126,6 +126,7 @@ export interface Alert {
   consecutiveDays: number;
   handlerId?: string;
   handlerName?: string;
+  processedAt?: string;
   resolvedAt?: string;
   resolution?: string;
   description: string;
@@ -182,6 +183,18 @@ export interface EnrollmentPlan {
   actualEnrollment: number;
   enrollmentRate: number;
   forecast: EnrollmentForecast[];
+  address?: {
+    province?: string;
+    city?: string;
+    district?: string;
+  };
+  uploadedByUserId?: string;
+  uploadedByRegion?: {
+    province?: string;
+    city?: string;
+    district?: string;
+  };
+  isNewInstitution?: boolean;
 }
 
 export type ReportPeriod = 'week' | 'month';

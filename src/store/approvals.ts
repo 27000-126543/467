@@ -377,7 +377,23 @@ export const useApprovalsStore = create<ApprovalsState>()(
     }),
     {
       name: 'approvals-storage',
-      partialize: (state) => ({ allApprovals: state.allApprovals }),
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (version < 2) {
+          return null;
+        }
+        return persistedState;
+      },
+      partialize: (state) => ({
+        allApprovals: state.allApprovals,
+        activeTab: state.activeTab,
+        typeFilter: state.typeFilter,
+        statusFilter: state.statusFilter,
+        dateRange: state.dateRange,
+        searchKeyword: state.searchKeyword,
+        page: state.page,
+        pageSize: state.pageSize,
+      }),
     }
   )
 );

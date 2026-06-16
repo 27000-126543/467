@@ -19,6 +19,8 @@ import {
 import { motion } from 'framer-motion';
 import StatCard from '@/components/common/StatCard';
 import { useEnrollmentStore, generateForecast } from '@/store/enrollment';
+import { mockInstitutions } from '@/mock/data';
+import { useAuthStore } from '@/store/auth';
 import { formatNumber, formatPercent, getSemesterText } from '@/utils/format';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
@@ -32,6 +34,7 @@ const semesterOptions = [
 ];
 
 export default function Enrollment() {
+  const { user } = useAuthStore();
   const {
     allPlans,
     loading,
@@ -330,9 +333,40 @@ export default function Enrollment() {
         const enrollmentRate = parseFloat(((actualEnrollment / plannedCapacity) * 100).toFixed(1)) || 0;
         const forecast = generateForecast(plannedCapacity);
 
+        const matchedInstitution = mockInstitutions.find(
+          (inst) => inst.name === institutionName
+        );
+
+        let institutionId = `inst_${institutionName}`;
+        let address: EnrollmentPlan['address'] = undefined;
+        let isNewInstitution = false;
+        let uploadedByUserId: string | undefined = undefined;
+        let uploadedByRegion: EnrollmentPlan['uploadedByRegion'] = undefined;
+
+        if (matchedInstitution) {
+          institutionId = matchedInstitution.id;
+          address = {
+            province: matchedInstitution.address.province,
+            city: matchedInstitution.address.city,
+            district: matchedInstitution.address.district,
+          };
+          isNewInstitution = false;
+        } else {
+          isNewInstitution = true;
+          uploadedByUserId = user?.id;
+          uploadedByRegion = user?.region
+            ? {
+                province: user.region.province,
+                city: user.region.city,
+                district: user.region.district,
+              }
+            : undefined;
+          address = {};
+        }
+
         return {
           id: `plan_${Date.now()}_${index}`,
-          institutionId: `inst_${institutionName}`,
+          institutionId,
           institutionName,
           year,
           semester,
@@ -340,6 +374,10 @@ export default function Enrollment() {
           actualEnrollment,
           enrollmentRate,
           forecast,
+          address,
+          isNewInstitution,
+          uploadedByUserId,
+          uploadedByRegion,
         };
       });
 

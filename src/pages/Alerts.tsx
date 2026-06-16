@@ -117,7 +117,7 @@ export default function Alerts() {
   };
 
   const handleViewDetail = (id: string) => {
-    navigate(`/pagedAlerts/${id}`);
+    navigate(`/alerts/${id}`);
   };
 
   const handleProcessClick = (id: string) => {

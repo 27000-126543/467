@@ -106,10 +106,44 @@ export const useEnrollmentStore = create<EnrollmentState>()(
         await new Promise((resolve) => setTimeout(resolve, 800));
 
         get().initPlans();
+        const user = useAuthStore.getState().user;
+
+        const processedPlans = plans.map((plan) => {
+          const matchedInstitution = mockInstitutions.find(
+            (inst) => inst.name === plan.institutionName
+          );
+
+          if (matchedInstitution) {
+            return {
+              ...plan,
+              institutionId: matchedInstitution.id,
+              address: {
+                province: matchedInstitution.address.province,
+                city: matchedInstitution.address.city,
+                district: matchedInstitution.address.district,
+              },
+              isNewInstitution: false,
+            };
+          } else {
+            return {
+              ...plan,
+              address: plan.address || {},
+              uploadedByUserId: user?.id,
+              uploadedByRegion: user?.region
+                ? {
+                    province: user.region.province,
+                    city: user.region.city,
+                    district: user.region.district,
+                  }
+                : undefined,
+              isNewInstitution: true,
+            };
+          }
+        });
 
         set((state) => {
           const existingIds = new Set(state.allPlans.map((p) => p.id));
-          const newPlans = plans.filter((p) => !existingIds.has(p.id));
+          const newPlans = processedPlans.filter((p) => !existingIds.has(p.id));
           return {
             allPlans: [...newPlans, ...state.allPlans],
           };
@@ -123,8 +157,43 @@ export const useEnrollmentStore = create<EnrollmentState>()(
 
       addPlan: (plan) => {
         get().initPlans();
+        const user = useAuthStore.getState().user;
+
+        const matchedInstitution = mockInstitutions.find(
+          (inst) => inst.name === plan.institutionName
+        );
+
+        let processedPlan = { ...plan };
+
+        if (matchedInstitution) {
+          processedPlan = {
+            ...processedPlan,
+            institutionId: matchedInstitution.id,
+            address: {
+              province: matchedInstitution.address.province,
+              city: matchedInstitution.address.city,
+              district: matchedInstitution.address.district,
+            },
+            isNewInstitution: false,
+          };
+        } else {
+          processedPlan = {
+            ...processedPlan,
+            address: processedPlan.address || {},
+            uploadedByUserId: user?.id,
+            uploadedByRegion: user?.region
+              ? {
+                  province: user.region.province,
+                  city: user.region.city,
+                  district: user.region.district,
+                }
+              : undefined,
+            isNewInstitution: true,
+          };
+        }
+
         set((state) => ({
-          allPlans: [plan, ...state.allPlans],
+          allPlans: [processedPlan, ...state.allPlans],
         }));
       },
 
@@ -155,21 +224,59 @@ export const useEnrollmentStore = create<EnrollmentState>()(
         let result = [...allPlans];
 
         if (user && user.role !== 'national') {
-          let instIds = mockInstitutions.map((i) => i.id);
-          if (user.region.province) {
-            instIds = mockInstitutions
-              .filter((i) => i.address.province === user.region.province)
-              .map((i) => i.id);
-          }
-          if (user.region.city) {
-            instIds = mockInstitutions
-              .filter((i) => i.address.city === user.region.city)
-              .map((i) => i.id);
-          }
-          if (user.region.institutionId) {
-            instIds = [user.region.institutionId];
-          }
-          result = result.filter((p) => instIds.includes(p.institutionId));
+          result = result.filter((p) => {
+            if (user.region.institutionId) {
+              return p.institutionId === user.region.institutionId;
+            }
+
+            const matchedInstitution = mockInstitutions.find(
+              (inst) => inst.id === p.institutionId
+            );
+
+            let planProvince: string | undefined;
+            let planCity: string | undefined;
+
+            if (matchedInstitution) {
+              planProvince = matchedInstitution.address.province;
+              planCity = matchedInstitution.address.city;
+            } else if (p.address) {
+              planProvince = p.address.province;
+              planCity = p.address.city;
+            }
+
+            if (!planProvince && p.uploadedByRegion) {
+              planProvince = p.uploadedByRegion.province;
+              planCity = p.uploadedByRegion.city;
+            }
+
+            if (p.isNewInstitution && p.uploadedByUserId === user.id) {
+              return true;
+            }
+
+            if (p.uploadedByRegion) {
+              const userProvince = user.region.province;
+              const userCity = user.region.city;
+              const uploadProvince = p.uploadedByRegion.province;
+              const uploadCity = p.uploadedByRegion.city;
+
+              if (userProvince && uploadProvince !== userProvince) {
+                return false;
+              }
+              if (userCity && uploadCity !== userCity) {
+                return false;
+              }
+              return true;
+            }
+
+            if (user.region.province && planProvince !== user.region.province) {
+              return false;
+            }
+            if (user.region.city && planCity !== user.region.city) {
+              return false;
+            }
+
+            return true;
+          });
         }
 
         if (searchKeyword) {
@@ -249,6 +356,13 @@ export const useEnrollmentStore = create<EnrollmentState>()(
     }),
     {
       name: 'enrollment-storage',
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
+        if (version < 2) {
+          return null;
+        }
+        return persistedState;
+      },
       partialize: (state) => ({ allPlans: state.allPlans }),
     }
   )

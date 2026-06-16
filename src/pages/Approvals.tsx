@@ -45,6 +45,7 @@ const statusOptions = [
 export default function Approvals() {
   const navigate = useNavigate();
   const {
+    allApprovals,
     loading,
     page,
     pageSize,
@@ -63,8 +64,8 @@ export default function Approvals() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const filteredApprovals = useMemo(() => getFilteredApprovals(), [getFilteredApprovals]);
-  const stats = useMemo(() => getStats(), [getStats]);
+  const filteredApprovals = useMemo(() => getFilteredApprovals(), [allApprovals, activeTab, typeFilter, statusFilter, searchKeyword, getFilteredApprovals]);
+  const stats = useMemo(() => getStats(), [allApprovals, activeTab, typeFilter, statusFilter, searchKeyword, getStats]);
 
   const pagedApprovals = useMemo(() => {
     const start = (page - 1) * pageSize;
