@@ -1,0 +1,251 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: 'Noto Sans SC', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.6;
+    font-weight: 400;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html {
+    font-size: 14px;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: #f7fafc;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(26, 54, 93, 0.03) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(56, 161, 105, 0.03) 0px, transparent 50%);
+    color: #1a202c;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #edf2f7;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e0;
+    border-radius: 3px;
+    transition: background 0.2s;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #a0aec0;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl shadow-card border border-neutral-100 overflow-hidden transition-all duration-300;
+  }
+
+  .card:hover {
+    @apply shadow-card-hover;
+  }
+
+  .card-header {
+    @apply px-6 py-4 border-b border-neutral-100;
+  }
+
+  .card-body {
+    @apply px-6 py-4;
+  }
+
+  .card-footer {
+    @apply px-6 py-3 border-t border-neutral-100 bg-neutral-50;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500;
+  }
+
+  .btn-success {
+    @apply bg-health-500 text-white hover:bg-health-600 focus:ring-health-500;
+  }
+
+  .btn-warning {
+    @apply bg-warning-500 text-white hover:bg-warning-600 focus:ring-warning-500;
+  }
+
+  .btn-danger {
+    @apply bg-danger-500 text-white hover:bg-danger-600 focus:ring-danger-500;
+  }
+
+  .btn-outline {
+    @apply border-2 border-neutral-200 text-neutral-700 hover:bg-neutral-50 focus:ring-neutral-300;
+  }
+
+  .btn-ghost {
+    @apply text-neutral-600 hover:bg-neutral-100 focus:ring-neutral-300;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 border border-neutral-200 rounded-lg bg-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+  }
+
+  .input-error {
+    @apply border-danger-400 focus:ring-danger-500;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply bg-health-100 text-health-700;
+  }
+
+  .badge-warning {
+    @apply bg-warning-100 text-warning-700;
+  }
+
+  .badge-danger {
+    @apply bg-danger-100 text-danger-700;
+  }
+
+  .badge-info {
+    @apply bg-primary-100 text-primary-700;
+  }
+
+  .badge-neutral {
+    @apply bg-neutral-100 text-neutral-700;
+  }
+
+  .stat-card {
+    @apply relative overflow-hidden rounded-xl p-6 transition-all duration-300 hover:scale-[1.02];
+  }
+
+  .stat-card-primary {
+    @apply bg-gradient-primary text-white;
+  }
+
+  .stat-card-health {
+    @apply bg-gradient-health text-white;
+  }
+
+  .stat-card-warning {
+    @apply bg-gradient-to-br from-warning-500 to-warning-600 text-white;
+  }
+
+  .stat-card-danger {
+    @apply bg-gradient-to-br from-danger-500 to-danger-600 text-white;
+  }
+
+  .skeleton {
+    @apply bg-neutral-200 animate-pulse rounded;
+  }
+
+  .skeleton-text {
+    @apply h-4 bg-neutral-200 animate-pulse rounded;
+  }
+
+  .progress-bar {
+    @apply h-2 bg-neutral-200 rounded-full overflow-hidden;
+  }
+
+  .progress-bar-fill {
+    @apply h-full transition-all duration-500 ease-out rounded-full;
+  }
+
+  .divider {
+    @apply h-px bg-neutral-200 my-4;
+  }
+
+  .tooltip {
+    @apply absolute z-50 px-3 py-2 text-sm text-white bg-neutral-800 rounded-lg shadow-lg pointer-events-none opacity-0 transition-opacity duration-200;
+  }
+
+  .tooltip-show {
+    @apply opacity-100;
+  }
+}
+
+@layer utilities {
+  .text-gradient-primary {
+    @apply bg-clip-text text-transparent bg-gradient-primary;
+  }
+
+  .text-gradient-health {
+    @apply bg-clip-text text-transparent bg-gradient-health;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .truncate-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .glass {
+    @apply bg-white/80 backdrop-blur-md border border-white/20;
+  }
+
+  .glass-dark {
+    @apply bg-neutral-800/80 backdrop-blur-md border border-neutral-700/20;
+  }
+
+  .animate-stagger-1 {
+    animation-delay: 0.1s;
+  }
+
+  .animate-stagger-2 {
+    animation-delay: 0.2s;
+  }
+
+  .animate-stagger-3 {
+    animation-delay: 0.3s;
+  }
+
+  .animate-stagger-4 {
+    animation-delay: 0.4s;
+  }
+
+  .animate-stagger-5 {
+    animation-delay: 0.5s;
+  }
+}
